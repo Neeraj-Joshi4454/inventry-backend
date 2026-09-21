@@ -1,0 +1,49 @@
+import { Router } from 'express';
+import healthRoutes from '../modules/health/health.routes';
+import authRoutes from '../modules/auth/auth.routes';
+import tenantRoutes from '../modules/tenants/tenant.routes';
+import userRoutes from '../modules/users/user.routes';
+import categoryRoutes from '../modules/categories/category.routes';
+import unitRoutes from '../modules/units/unit.routes';
+import productRoutes from '../modules/products/product.routes';
+import supplierRoutes from '../modules/suppliers/supplier.routes';
+import inventoryRoutes from '../modules/inventory/inventory.routes';
+import purchaseRoutes from '../modules/purchases/purchase.routes';
+import saleRoutes from '../modules/sales/sale.routes';
+import customerRoutes from '../modules/customers/customer.routes';
+import customerPaymentRoutes from '../modules/customerPayments/customerPayment.routes';
+import expenseCategoryRoutes from '../modules/expenseCategories/expenseCategory.routes';
+import expenseRoutes from '../modules/expenses/expense.routes';
+import taxRoutes from '../modules/taxes/tax.routes';
+import reportRoutes from '../modules/reports/report.routes';
+import auditLogRoutes from '../modules/auditLogs/auditLog.routes';
+import notificationRoutes from '../modules/notifications/notification.routes';
+import exportRoutes from '../modules/exports/export.routes';
+import businessSettingsRoutes from '../modules/businessSettings/businessSettings.routes';
+
+/** Single aggregation point for every /api/v1/* route. */
+const router = Router();
+
+router.use('/health', healthRoutes);
+router.use('/auth', authRoutes);
+router.use('/tenants', tenantRoutes);
+router.use('/users', userRoutes);
+router.use('/categories', categoryRoutes);
+router.use('/units', unitRoutes);
+router.use('/products', productRoutes);
+router.use('/suppliers', supplierRoutes);
+router.use('/inventory', inventoryRoutes);
+router.use('/purchases', purchaseRoutes);
+router.use('/sales', saleRoutes);
+router.use('/customers', customerRoutes);
+router.use('/customer-payments', customerPaymentRoutes);
+router.use('/expense-categories', expenseCategoryRoutes);
+router.use('/expenses', expenseRoutes);
+router.use('/taxes', taxRoutes);
+router.use('/reports', reportRoutes);
+router.use('/audit-logs', auditLogRoutes);
+router.use('/notifications', notificationRoutes);
+router.use('/exports', exportRoutes);
+router.use('/business-settings', businessSettingsRoutes);
+
+export default router;
