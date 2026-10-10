@@ -96,6 +96,9 @@ export async function listInventory(
   if (query.status) {
     pipeline.push({ $match: { status: query.status } });
   }
+  if (query.inStock) {
+    pipeline.push({ $match: { currentStock: { $gt: 0 } } });
+  }
 
   pipeline.push(
     { $sort: { name: 1 } },

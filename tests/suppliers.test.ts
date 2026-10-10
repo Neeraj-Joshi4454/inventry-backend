@@ -9,6 +9,7 @@ import {
   createTenantWithOwnerViaApi,
   loginOrThrow,
   nextMobileNumber,
+  stockViaPurchase,
 } from './helpers/factories';
 
 const app = createApp();
@@ -153,9 +154,7 @@ describe('PATCH /api/v1/suppliers/:id/status', () => {
     const allListRes = await request(app)
       .get('/api/v1/suppliers?status=all')
       .set('Authorization', `Bearer ${owner.accessToken}`);
-    expect(
-      allListRes.body.data.find((s: { _id: string }) => s._id === supplier._id)
-    ).toBeDefined();
+    expect(allListRes.body.data.find((s: { _id: string }) => s._id === supplier._id)).toBeDefined();
 
     const reactivateRes = await request(app)
       .patch(`/api/v1/suppliers/${supplier._id}/status`)
@@ -309,7 +308,10 @@ describe('GET /api/v1/suppliers/:id/purchases', () => {
     await request(app)
       .post('/api/v1/purchases')
       .set('Authorization', `Bearer ${owner.accessToken}`)
-      .send({ supplierId: supplier._id, items: [{ productId: product._id, quantity: 10, unitPrice: 10 }] })
+      .send({
+        supplierId: supplier._id,
+        items: [{ productId: product._id, quantity: 10, unitPrice: 10 }],
+      })
       .expect(201);
 
     const futureOnly = await request(app)
@@ -367,7 +369,10 @@ describe('Purchase enhancements: invoice number, notes, and inventory impact', (
     const res = await request(app)
       .post('/api/v1/purchases')
       .set('Authorization', `Bearer ${owner.accessToken}`)
-      .send({ supplierId: supplier._id, items: [{ productId: product._id, quantity: 10, unitPrice: 10 }] });
+      .send({
+        supplierId: supplier._id,
+        items: [{ productId: product._id, quantity: 10, unitPrice: 10 }],
+      });
     expect(res.status).toBe(201);
     expect(res.body.data.invoiceNumber).toBeUndefined();
   });
@@ -378,11 +383,7 @@ describe('Purchase enhancements: invoice number, notes, and inventory impact', (
     const cement = await createProductViaApi(app, owner.accessToken, { name: 'Cement' });
     const steel = await createProductViaApi(app, owner.accessToken, { name: 'Steel' });
 
-    await request(app)
-      .post('/api/v1/inventory/opening-stock')
-      .set('Authorization', `Bearer ${owner.accessToken}`)
-      .send({ productId: cement._id, quantity: 500 })
-      .expect(201);
+    await stockViaPurchase(app, owner.accessToken, cement._id, 500);
 
     const createRes = await request(app)
       .post('/api/v1/purchases')

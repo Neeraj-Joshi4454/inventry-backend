@@ -7,6 +7,7 @@ import {
   createTenantWithOwnerViaApi,
   loginOrThrow,
   nextMobileNumber,
+  stockViaPurchase,
 } from './helpers/factories';
 
 const app = createApp();
@@ -24,16 +25,15 @@ async function setupTenantOwner() {
   return { superAdmin, tenant, owner };
 }
 
-async function configureTax(
-  owner: { accessToken: string },
-  body: Record<string, unknown>
-) {
+async function configureTax(owner: { accessToken: string }, body: Record<string, unknown>) {
   const res = await request(app)
     .patch('/api/v1/taxes')
     .set('Authorization', `Bearer ${owner.accessToken}`)
     .send(body);
   if (res.status !== 200) {
-    throw new Error(`Expected tax config update to succeed, got ${res.status}: ${JSON.stringify(res.body)}`);
+    throw new Error(
+      `Expected tax config update to succeed, got ${res.status}: ${JSON.stringify(res.body)}`
+    );
   }
   return res.body.data;
 }
@@ -62,7 +62,9 @@ async function createProduct(
       isPriceInclusive: overrides.isPriceInclusive ?? false,
     });
   if (res.status !== 201) {
-    throw new Error(`Expected product creation to succeed, got ${res.status}: ${JSON.stringify(res.body)}`);
+    throw new Error(
+      `Expected product creation to succeed, got ${res.status}: ${JSON.stringify(res.body)}`
+    );
   }
   return res.body.data as { _id: string; name: string };
 }
@@ -74,7 +76,9 @@ async function createCustomer(owner: { accessToken: string }, state?: string) {
     .set('Authorization', `Bearer ${owner.accessToken}`)
     .send({ name: `Customer ${unique}`, address: state ? { state } : undefined });
   if (res.status !== 201) {
-    throw new Error(`Expected customer creation to succeed, got ${res.status}: ${JSON.stringify(res.body)}`);
+    throw new Error(
+      `Expected customer creation to succeed, got ${res.status}: ${JSON.stringify(res.body)}`
+    );
   }
   return res.body.data as { _id: string; name: string };
 }
@@ -86,17 +90,15 @@ async function createSupplier(owner: { accessToken: string }, state?: string) {
     .set('Authorization', `Bearer ${owner.accessToken}`)
     .send({ name: `Supplier ${unique}`, address: state ? { state } : undefined });
   if (res.status !== 201) {
-    throw new Error(`Expected supplier creation to succeed, got ${res.status}: ${JSON.stringify(res.body)}`);
+    throw new Error(
+      `Expected supplier creation to succeed, got ${res.status}: ${JSON.stringify(res.body)}`
+    );
   }
   return res.body.data as { _id: string; name: string };
 }
 
 async function stockProduct(owner: { accessToken: string }, productId: string, quantity: number) {
-  await request(app)
-    .post('/api/v1/inventory/opening-stock')
-    .set('Authorization', `Bearer ${owner.accessToken}`)
-    .send({ productId, quantity })
-    .expect(201);
+  await stockViaPurchase(app, owner.accessToken, productId, quantity);
 }
 
 describe('GET/PATCH /api/v1/taxes', () => {
@@ -197,7 +199,10 @@ describe('Sales tax calculation', () => {
     const res = await request(app)
       .post('/api/v1/sales')
       .set('Authorization', `Bearer ${owner.accessToken}`)
-      .send({ customerId: customer._id, items: [{ productId: product._id, quantity: 10, unitPrice: 100 }] })
+      .send({
+        customerId: customer._id,
+        items: [{ productId: product._id, quantity: 10, unitPrice: 100 }],
+      })
       .expect(201);
 
     expect(Number(res.body.data.taxAmount)).toBe(0);
@@ -216,7 +221,10 @@ describe('Sales tax calculation', () => {
     const res = await request(app)
       .post('/api/v1/sales')
       .set('Authorization', `Bearer ${owner.accessToken}`)
-      .send({ customerId: customer._id, items: [{ productId: product._id, quantity: 10, unitPrice: 100 }] })
+      .send({
+        customerId: customer._id,
+        items: [{ productId: product._id, quantity: 10, unitPrice: 100 }],
+      })
       .expect(201);
 
     const expectedTax = 1000 * (rate / 100);
@@ -234,7 +242,10 @@ describe('Sales tax calculation', () => {
     const res = await request(app)
       .post('/api/v1/sales')
       .set('Authorization', `Bearer ${owner.accessToken}`)
-      .send({ customerId: customer._id, items: [{ productId: product._id, quantity: 10, unitPrice: 100 }] })
+      .send({
+        customerId: customer._id,
+        items: [{ productId: product._id, quantity: 10, unitPrice: 100 }],
+      })
       .expect(201);
 
     expect(res.body.data.taxType).toBe('CGST_SGST');
@@ -254,7 +265,10 @@ describe('Sales tax calculation', () => {
     const res = await request(app)
       .post('/api/v1/sales')
       .set('Authorization', `Bearer ${owner.accessToken}`)
-      .send({ customerId: customer._id, items: [{ productId: product._id, quantity: 10, unitPrice: 100 }] })
+      .send({
+        customerId: customer._id,
+        items: [{ productId: product._id, quantity: 10, unitPrice: 100 }],
+      })
       .expect(201);
 
     expect(res.body.data.taxType).toBe('IGST');
@@ -274,7 +288,10 @@ describe('Sales tax calculation', () => {
     const res = await request(app)
       .post('/api/v1/sales')
       .set('Authorization', `Bearer ${owner.accessToken}`)
-      .send({ customerId: customer._id, items: [{ productId: product._id, quantity: 1, unitPrice: 100 }] })
+      .send({
+        customerId: customer._id,
+        items: [{ productId: product._id, quantity: 1, unitPrice: 100 }],
+      })
       .expect(201);
 
     expect(Number(res.body.data.subTotal)).toBeCloseTo(100, 2);
@@ -292,7 +309,10 @@ describe('Sales tax calculation', () => {
     const res = await request(app)
       .post('/api/v1/sales')
       .set('Authorization', `Bearer ${owner.accessToken}`)
-      .send({ customerId: customer._id, items: [{ productId: product._id, quantity: 1, unitPrice: 118 }] })
+      .send({
+        customerId: customer._id,
+        items: [{ productId: product._id, quantity: 1, unitPrice: 118 }],
+      })
       .expect(201);
 
     // 118 inclusive of 18% => base 100, tax 18.
@@ -381,7 +401,10 @@ describe('Purchase tax calculation', () => {
     const res = await request(app)
       .post('/api/v1/purchases')
       .set('Authorization', `Bearer ${owner.accessToken}`)
-      .send({ supplierId: supplier._id, items: [{ productId: product._id, quantity: 10, unitPrice: 100 }] })
+      .send({
+        supplierId: supplier._id,
+        items: [{ productId: product._id, quantity: 10, unitPrice: 100 }],
+      })
       .expect(201);
 
     expect(res.body.data.taxType).toBe('IGST');
@@ -416,114 +439,15 @@ describe('Purchase tax calculation', () => {
   });
 });
 
-describe('Sale returns reverse tax correctly', () => {
-  it('reverses tax proportionally for a partial return', async () => {
-    const { owner } = await setupTenantOwner();
-    await configureTax(owner, { gstEnabled: true, gstin: '29ABCDE1234F1Z5', state: 'Karnataka' });
-    const product = await createProduct(owner, { taxRate: 18 });
-    const customer = await createCustomer(owner, 'Karnataka');
-    await stockProduct(owner, product._id, 100);
-
-    const sale = await request(app)
-      .post('/api/v1/sales')
-      .set('Authorization', `Bearer ${owner.accessToken}`)
-      .send({ customerId: customer._id, items: [{ productId: product._id, quantity: 10, unitPrice: 100 }] })
-      .expect(201);
-
-    const saleDetail = await request(app)
-      .get(`/api/v1/sales/${sale.body.data._id}`)
-      .set('Authorization', `Bearer ${owner.accessToken}`);
-    const saleItemId = saleDetail.body.data.items[0]._id as string;
-
-    // Return 4 of the 10 units (40%).
-    const returnRes = await request(app)
-      .post(`/api/v1/sales/${sale.body.data._id}/returns`)
-      .set('Authorization', `Bearer ${owner.accessToken}`)
-      .send({ items: [{ saleItemId, quantity: 4 }] });
-
-    expect(returnRes.status).toBe(201);
-    // Original: taxable 1000, tax 180 (90 cgst + 90 sgst). 40% reversed:
-    // taxable 400, cgst 36, sgst 36, tax 72, total 472.
-    expect(Number(returnRes.body.data.taxableAmount)).toBeCloseTo(400, 2);
-    expect(Number(returnRes.body.data.cgstAmount)).toBeCloseTo(36, 2);
-    expect(Number(returnRes.body.data.sgstAmount)).toBeCloseTo(36, 2);
-    expect(Number(returnRes.body.data.taxAmount)).toBeCloseTo(72, 2);
-    expect(Number(returnRes.body.data.totalAmount)).toBeCloseTo(472, 2);
-    expect(returnRes.body.data.taxType).toBe('CGST_SGST');
-  });
-
-  it('does not create a duplicate inventory transaction or duplicate sale on return', async () => {
-    const { owner } = await setupTenantOwner();
-    await configureTax(owner, { gstEnabled: true, gstin: '29ABCDE1234F1Z5', state: 'Karnataka' });
-    const product = await createProduct(owner, { taxRate: 18 });
-    const customer = await createCustomer(owner, 'Karnataka');
-    await stockProduct(owner, product._id, 100);
-
-    const sale = await request(app)
-      .post('/api/v1/sales')
-      .set('Authorization', `Bearer ${owner.accessToken}`)
-      .send({ customerId: customer._id, items: [{ productId: product._id, quantity: 10, unitPrice: 100 }] })
-      .expect(201);
-    const saleDetail = await request(app)
-      .get(`/api/v1/sales/${sale.body.data._id}`)
-      .set('Authorization', `Bearer ${owner.accessToken}`);
-    const saleItemId = saleDetail.body.data.items[0]._id as string;
-
-    await request(app)
-      .post(`/api/v1/sales/${sale.body.data._id}/returns`)
-      .set('Authorization', `Bearer ${owner.accessToken}`)
-      .send({ items: [{ saleItemId, quantity: 4 }] })
-      .expect(201);
-
-    const salesList = await request(app)
-      .get('/api/v1/sales')
-      .set('Authorization', `Bearer ${owner.accessToken}`);
-    expect(salesList.body.data).toHaveLength(1);
-
-    const ledger = await request(app)
-      .get(`/api/v1/inventory/${product._id}/transactions`)
-      .set('Authorization', `Bearer ${owner.accessToken}`);
-    // OPENING_STOCK, SALE, SALE_RETURN — exactly one of each, no duplicates.
-    expect(ledger.body.data.transactions).toHaveLength(3);
-    expect(ledger.body.data.transactions.filter((t: { type: string }) => t.type === 'SALE_RETURN')).toHaveLength(1);
-  });
-});
-
-describe('Purchase returns reverse tax correctly', () => {
-  it('reverses tax proportionally for a partial return', async () => {
-    const { owner } = await setupTenantOwner();
-    await configureTax(owner, { gstEnabled: true, gstin: '29ABCDE1234F1Z5', state: 'Karnataka' });
-    const product = await createProduct(owner, { taxRate: 12 });
-    const supplier = await createSupplier(owner, 'Karnataka');
-
-    const purchase = await request(app)
-      .post('/api/v1/purchases')
-      .set('Authorization', `Bearer ${owner.accessToken}`)
-      .send({ supplierId: supplier._id, items: [{ productId: product._id, quantity: 10, unitPrice: 100 }] })
-      .expect(201);
-
-    const purchaseDetail = await request(app)
-      .get(`/api/v1/purchases/${purchase.body.data._id}`)
-      .set('Authorization', `Bearer ${owner.accessToken}`);
-    const purchaseItemId = purchaseDetail.body.data.items[0]._id as string;
-
-    const returnRes = await request(app)
-      .post(`/api/v1/purchases/${purchase.body.data._id}/returns`)
-      .set('Authorization', `Bearer ${owner.accessToken}`)
-      .send({ items: [{ purchaseItemId, quantity: 5 }] });
-
-    expect(returnRes.status).toBe(201);
-    // Original: taxable 1000, tax 120 (60 cgst + 60 sgst). 50% reversed.
-    expect(Number(returnRes.body.data.taxableAmount)).toBeCloseTo(500, 2);
-    expect(Number(returnRes.body.data.taxAmount)).toBeCloseTo(60, 2);
-    expect(Number(returnRes.body.data.totalAmount)).toBeCloseTo(560, 2);
-  });
-});
-
 describe('Historical transactions are unaffected by later tax setting changes', () => {
   it('a sale keeps its original tax amounts after the tax config changes', async () => {
     const { owner } = await setupTenantOwner();
-    await configureTax(owner, { gstEnabled: true, gstin: '29ABCDE1234F1Z5', state: 'Karnataka', defaultTaxRate: 18 });
+    await configureTax(owner, {
+      gstEnabled: true,
+      gstin: '29ABCDE1234F1Z5',
+      state: 'Karnataka',
+      defaultTaxRate: 18,
+    });
     const product = await createProduct(owner, { taxRate: 18 });
     const customer = await createCustomer(owner, 'Karnataka');
     await stockProduct(owner, product._id, 100);
@@ -531,7 +455,10 @@ describe('Historical transactions are unaffected by later tax setting changes', 
     const sale = await request(app)
       .post('/api/v1/sales')
       .set('Authorization', `Bearer ${owner.accessToken}`)
-      .send({ customerId: customer._id, items: [{ productId: product._id, quantity: 10, unitPrice: 100 }] })
+      .send({
+        customerId: customer._id,
+        items: [{ productId: product._id, quantity: 10, unitPrice: 100 }],
+      })
       .expect(201);
 
     // Now change the tax config drastically: disable GST entirely, and
@@ -567,8 +494,20 @@ describe('GET /api/v1/sales/:id/invoice', () => {
     const sale = await request(app)
       .post('/api/v1/sales')
       .set('Authorization', `Bearer ${owner.accessToken}`)
-      .send({ customerId: customer._id, items: [{ productId: product._id, quantity: 10, unitPrice: 100 }] })
+      .send({
+        customerId: customer._id,
+        items: [{ productId: product._id, quantity: 10, unitPrice: 100 }],
+      })
       .expect(201);
+
+    await request(app)
+      .patch('/api/v1/business-settings')
+      .set('Authorization', `Bearer ${owner.accessToken}`)
+      .send({
+        email: 'billing@stockyard.test',
+        address: { line1: '12 Market Road', city: 'Pune', pincode: '411001' },
+      })
+      .expect(200);
 
     const res = await request(app)
       .get(`/api/v1/sales/${sale.body.data._id}/invoice`)
@@ -577,6 +516,10 @@ describe('GET /api/v1/sales/:id/invoice', () => {
     expect(res.status).toBe(200);
     expect(res.body.data.business.gstin).toBe('29ABCDE1234F1Z5');
     expect(res.body.data.customer.name).toBeDefined();
+    // Business contact details print on the invoice header.
+    expect(res.body.data.business.phone).toMatch(/\d{10}/);
+    expect(res.body.data.business.email).toBe('billing@stockyard.test');
+    expect(res.body.data.business.address.pincode).toBe('411001');
     expect(res.body.data.invoiceNumber).toBe(sale.body.data.saleNumber);
     expect(res.body.data.items[0].hsnCode).toBe('2523');
     expect(Number(res.body.data.items[0].taxableValue)).toBeCloseTo(1000, 2);
@@ -594,7 +537,10 @@ describe('GET /api/v1/sales/:id/invoice', () => {
     const sale = await request(app)
       .post('/api/v1/sales')
       .set('Authorization', `Bearer ${ownerA.accessToken}`)
-      .send({ customerId: customer._id, items: [{ productId: product._id, quantity: 1, unitPrice: 100 }] })
+      .send({
+        customerId: customer._id,
+        items: [{ productId: product._id, quantity: 1, unitPrice: 100 }],
+      })
       .expect(201);
 
     const res = await request(app)
@@ -649,7 +595,10 @@ describe('GET /api/v1/purchases/:id/invoice', () => {
     const purchase = await request(app)
       .post('/api/v1/purchases')
       .set('Authorization', `Bearer ${owner.accessToken}`)
-      .send({ supplierId: supplier._id, items: [{ productId: product._id, quantity: 1, unitPrice: 50 }] })
+      .send({
+        supplierId: supplier._id,
+        items: [{ productId: product._id, quantity: 1, unitPrice: 50 }],
+      })
       .expect(201);
 
     const res = await request(app)
@@ -668,7 +617,10 @@ describe('GET /api/v1/purchases/:id/invoice', () => {
     const purchase = await request(app)
       .post('/api/v1/purchases')
       .set('Authorization', `Bearer ${ownerA.accessToken}`)
-      .send({ supplierId: supplier._id, items: [{ productId: product._id, quantity: 1, unitPrice: 100 }] })
+      .send({
+        supplierId: supplier._id,
+        items: [{ productId: product._id, quantity: 1, unitPrice: 100 }],
+      })
       .expect(201);
 
     const res = await request(app)

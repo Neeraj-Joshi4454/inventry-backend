@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { sendSuccess } from '../../utils/apiResponse';
-import { createCategory, listCategories } from './category.service';
+import { createCategory, deleteCategory, listCategories } from './category.service';
 import type { CreateCategoryInput } from './category.validators';
 
 export const listCategoriesHandler = asyncHandler(async (req: Request, res: Response) => {
@@ -18,4 +18,15 @@ export const createCategoryHandler = asyncHandler(async (req: Request, res: Resp
     ipAddress: req.ip,
   });
   sendSuccess(res, 201, 'Category created successfully', category);
+});
+
+export const deleteCategoryHandler = asyncHandler(async (req: Request, res: Response) => {
+  await deleteCategory({
+    tenantId: req.user!.tenantId!,
+    userId: req.user!.userId,
+    userRole: req.user!.role,
+    categoryId: req.params.id as string,
+    ipAddress: req.ip,
+  });
+  sendSuccess(res, 200, 'Category deleted successfully', null);
 });

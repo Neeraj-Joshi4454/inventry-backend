@@ -2,8 +2,15 @@ import type { Request, Response } from 'express';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { sendPaginated, sendSuccess } from '../../utils/apiResponse';
 import { getPaginationParams } from '../../utils/pagination';
-import { getCustomerPaymentById, listCustomerPayments, recordCustomerPayment } from './customerPayment.service';
-import type { ListCustomerPaymentsQuery, RecordCustomerPaymentInput } from './customerPayment.validators';
+import {
+  getCustomerPaymentById,
+  listCustomerPayments,
+  recordCustomerPayment,
+} from './customerPayment.service';
+import type {
+  ListCustomerPaymentsQuery,
+  RecordCustomerPaymentInput,
+} from './customerPayment.validators';
 
 export const recordCustomerPaymentHandler = asyncHandler(async (req: Request, res: Response) => {
   const payment = await recordCustomerPayment({

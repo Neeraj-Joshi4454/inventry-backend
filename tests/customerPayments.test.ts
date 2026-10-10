@@ -9,6 +9,7 @@ import {
   createTenantWithOwnerViaApi,
   loginOrThrow,
   nextMobileNumber,
+  stockViaPurchase,
 } from './helpers/factories';
 
 const app = createApp();
@@ -27,23 +28,18 @@ async function setupTenantOwner() {
 }
 
 async function stockProduct(owner: { accessToken: string }, productId: string, quantity: number) {
-  await request(app)
-    .post('/api/v1/inventory/opening-stock')
-    .set('Authorization', `Bearer ${owner.accessToken}`)
-    .send({ productId, quantity })
-    .expect(201);
+  await stockViaPurchase(app, owner.accessToken, productId, quantity);
 }
 
-async function createSale(
-  owner: { accessToken: string },
-  body: Record<string, unknown>
-) {
+async function createSale(owner: { accessToken: string }, body: Record<string, unknown>) {
   const res = await request(app)
     .post('/api/v1/sales')
     .set('Authorization', `Bearer ${owner.accessToken}`)
     .send(body);
   if (res.status !== 201) {
-    throw new Error(`Expected sale creation to succeed, got ${res.status}: ${JSON.stringify(res.body)}`);
+    throw new Error(
+      `Expected sale creation to succeed, got ${res.status}: ${JSON.stringify(res.body)}`
+    );
   }
   return res.body.data as { _id: string; totalAmount: string };
 }
@@ -94,6 +90,51 @@ describe('POST /api/v1/sales — payment fields', () => {
     expect(detail.body.data.sale.paymentStatus).toBe('PARTIAL');
     expect(Number(detail.body.data.sale.paidAmount)).toBeCloseTo(400, 2);
     expect(Number(detail.body.data.sale.dueAmount)).toBeCloseTo(600, 2);
+  });
+
+  it('stores the transaction reference of an upfront UPI payment', async () => {
+    const { owner } = await setupTenantOwner();
+    const product = await createProductViaApi(app, owner.accessToken);
+    const customer = await createCustomerViaApi(app, owner.accessToken);
+    await stockProduct(owner, product._id, 100);
+
+    const sale = await createSale(owner, {
+      customerId: customer._id,
+      paymentMethod: 'UPI',
+      paidAmount: 1000,
+      paymentReference: ' UPI-4471-AXB ',
+      items: [{ productId: product._id, quantity: 10, unitPrice: 100 }],
+    });
+
+    const detail = await request(app)
+      .get(`/api/v1/sales/${sale._id}`)
+      .set('Authorization', `Bearer ${owner.accessToken}`);
+    expect(detail.body.data.sale.paymentStatus).toBe('PAID');
+    expect(detail.body.data.payments[0].method).toBe('UPI');
+    expect(detail.body.data.payments[0].referenceNumber).toBe('UPI-4471-AXB');
+  });
+
+  it('rejects money received with CREDIT as its payment mode (400), creating no sale', async () => {
+    const { owner } = await setupTenantOwner();
+    const product = await createProductViaApi(app, owner.accessToken);
+    const customer = await createCustomerViaApi(app, owner.accessToken);
+    await stockProduct(owner, product._id, 100);
+
+    const res = await request(app)
+      .post('/api/v1/sales')
+      .set('Authorization', `Bearer ${owner.accessToken}`)
+      .send({
+        customerId: customer._id,
+        paymentMethod: 'CREDIT',
+        paidAmount: 500,
+        items: [{ productId: product._id, quantity: 10, unitPrice: 100 }],
+      });
+    expect(res.status).toBe(400);
+
+    const list = await request(app)
+      .get('/api/v1/sales')
+      .set('Authorization', `Bearer ${owner.accessToken}`);
+    expect(list.body.data).toHaveLength(0);
   });
 
   it('a credit sale (no paidAmount) defaults to CREDIT status with the full amount outstanding', async () => {

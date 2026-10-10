@@ -64,15 +64,8 @@ export async function getDashboardSummary(tenantId: Types.ObjectId) {
   const { start: todayStart, end: todayEnd } = dayBounds(now);
   const { start: monthStart, end: monthEnd } = monthBounds(now);
 
-  const [
-    stockAgg,
-    todaysSalesAgg,
-    todaysPurchasesAgg,
-    todaysSaleReturnsAgg,
-    todaysPurchaseReturnsAgg,
-    todaysExpensesAgg,
-    thisMonthExpensesAgg,
-  ] = await Promise.all([
+  const [stockAgg, todaysSalesAgg, todaysPurchasesAgg, todaysExpensesAgg, thisMonthExpensesAgg] =
+    await Promise.all([
       // Product-first, left-joined to Inventory — a product with no stock
       // movement yet has no Inventory document (see inventory.query.service.ts)
       // and must still count as an OUT_OF_STOCK product with 0 quantity/value,
@@ -102,7 +95,12 @@ export async function getDashboardSummary(tenantId: Types.ObjectId) {
             lowStockProducts: {
               $sum: {
                 $cond: [
-                  { $and: [{ $gt: ['$currentStock', 0] }, { $lte: ['$currentStock', '$lowStockThreshold'] }] },
+                  {
+                    $and: [
+                      { $gt: ['$currentStock', 0] },
+                      { $lte: ['$currentStock', '$lowStockThreshold'] },
+                    ],
+                  },
                   1,
                   0,
                 ],
@@ -118,14 +116,6 @@ export async function getDashboardSummary(tenantId: Types.ObjectId) {
       ]),
       Purchase.aggregate([
         { $match: { tenantId, purchaseDate: { $gte: todayStart, $lt: todayEnd } } },
-        { $group: { _id: null, count: { $sum: 1 }, amount: { $sum: '$totalAmount' } } },
-      ]),
-      SaleReturn.aggregate([
-        { $match: { tenantId, returnDate: { $gte: todayStart, $lt: todayEnd } } },
-        { $group: { _id: null, count: { $sum: 1 }, amount: { $sum: '$totalAmount' } } },
-      ]),
-      PurchaseReturn.aggregate([
-        { $match: { tenantId, returnDate: { $gte: todayStart, $lt: todayEnd } } },
         { $group: { _id: null, count: { $sum: 1 }, amount: { $sum: '$totalAmount' } } },
       ]),
       Expense.aggregate([
@@ -159,8 +149,6 @@ export async function getDashboardSummary(tenantId: Types.ObjectId) {
   };
   const todaysSales = todaysSalesAgg[0] ?? { count: 0, amount: 0 };
   const todaysPurchases = todaysPurchasesAgg[0] ?? { count: 0, amount: 0 };
-  const saleReturns = todaysSaleReturnsAgg[0] ?? { count: 0, amount: 0 };
-  const purchaseReturns = todaysPurchaseReturnsAgg[0] ?? { count: 0, amount: 0 };
   const todaysExpenses = todaysExpensesAgg[0] ?? { count: 0, amount: 0 };
   const thisMonthExpenses = thisMonthExpensesAgg[0] ?? { count: 0, amount: 0 };
 
@@ -172,12 +160,6 @@ export async function getDashboardSummary(tenantId: Types.ObjectId) {
     outOfStockProducts: stock.outOfStockProducts,
     todaysSales: { count: todaysSales.count, amount: todaysSales.amount },
     todaysPurchases: { count: todaysPurchases.count, amount: todaysPurchases.amount },
-    todaysReturns: {
-      count: saleReturns.count + purchaseReturns.count,
-      amount: toNumber(saleReturns.amount) + toNumber(purchaseReturns.amount),
-      saleReturns: { count: saleReturns.count, amount: saleReturns.amount },
-      purchaseReturns: { count: purchaseReturns.count, amount: purchaseReturns.amount },
-    },
     todaysExpenses: { count: todaysExpenses.count, amount: todaysExpenses.amount },
     thisMonthExpenses: { count: thisMonthExpenses.count, amount: thisMonthExpenses.amount },
   });
@@ -250,7 +232,14 @@ export async function getSalesReport(
       { $sort: { saleDate: -1 } },
       { $skip: pagination.skip },
       { $limit: pagination.limit },
-      { $lookup: { from: 'customers', localField: 'customerId', foreignField: '_id', as: 'customer' } },
+      {
+        $lookup: {
+          from: 'customers',
+          localField: 'customerId',
+          foreignField: '_id',
+          as: 'customer',
+        },
+      },
       { $unwind: { path: '$customer', preserveNullAndEmptyArrays: true } },
       { $lookup: { from: 'users', localField: 'createdBy', foreignField: '_id', as: 'creator' } },
       { $unwind: { path: '$creator', preserveNullAndEmptyArrays: true } },
@@ -310,7 +299,14 @@ export async function getPurchaseReport(
 
   const basePipeline: PipelineStage[] = [
     { $match: match },
-    { $lookup: { from: 'purchaseitems', localField: '_id', foreignField: 'purchaseId', as: 'items' } },
+    {
+      $lookup: {
+        from: 'purchaseitems',
+        localField: '_id',
+        foreignField: 'purchaseId',
+        as: 'items',
+      },
+    },
   ];
   if (productFilter) {
     basePipeline.push({ $match: { 'items.productId': productFilter } });
@@ -357,7 +353,14 @@ export async function getPurchaseReport(
       { $sort: { purchaseDate: -1 } },
       { $skip: pagination.skip },
       { $limit: pagination.limit },
-      { $lookup: { from: 'suppliers', localField: 'supplierId', foreignField: '_id', as: 'supplier' } },
+      {
+        $lookup: {
+          from: 'suppliers',
+          localField: 'supplierId',
+          foreignField: '_id',
+          as: 'supplier',
+        },
+      },
       { $unwind: { path: '$supplier', preserveNullAndEmptyArrays: true } },
       { $lookup: { from: 'users', localField: 'createdBy', foreignField: '_id', as: 'creator' } },
       { $unwind: { path: '$creator', preserveNullAndEmptyArrays: true } },
@@ -411,7 +414,10 @@ function stockStatusStage() {
       stockStatus: {
         $switch: {
           branches: [
-            { case: { $lte: [{ $ifNull: ['$inventory.currentStock', 0] }, 0] }, then: 'OUT_OF_STOCK' },
+            {
+              case: { $lte: [{ $ifNull: ['$inventory.currentStock', 0] }, 0] },
+              then: 'OUT_OF_STOCK',
+            },
             {
               case: {
                 $lte: [{ $ifNull: ['$inventory.currentStock', 0] }, '$lowStockThreshold'],
@@ -435,14 +441,31 @@ export async function getStockReport(
   if (query.categoryId) matchStage.categoryId = new Types.ObjectId(query.categoryId);
   if (query.search?.trim()) {
     const term = escapeRegex(query.search.trim());
-    matchStage.$or = [{ name: { $regex: term, $options: 'i' } }, { sku: { $regex: term, $options: 'i' } }];
+    matchStage.$or = [
+      { name: { $regex: term, $options: 'i' } },
+      { sku: { $regex: term, $options: 'i' } },
+    ];
   }
 
   const pipeline: PipelineStage[] = [
     { $match: matchStage },
-    { $lookup: { from: 'inventories', localField: '_id', foreignField: 'productId', as: 'inventory' } },
+    {
+      $lookup: {
+        from: 'inventories',
+        localField: '_id',
+        foreignField: 'productId',
+        as: 'inventory',
+      },
+    },
     { $unwind: { path: '$inventory', preserveNullAndEmptyArrays: true } },
-    { $lookup: { from: 'categories', localField: 'categoryId', foreignField: '_id', as: 'category' } },
+    {
+      $lookup: {
+        from: 'categories',
+        localField: 'categoryId',
+        foreignField: '_id',
+        as: 'category',
+      },
+    },
     { $unwind: '$category' },
     stockStatusStage(),
     { $addFields: { stockValue: { $multiply: ['$currentStock', '$purchasePrice'] } } },
@@ -523,7 +546,7 @@ const REFERENCE_LOOKUPS: Partial<Record<ReferenceType, { model: Model<any>; fiel
  * conditional $lookup per collection in the aggregation pipeline. Simpler,
  * and cheap at report-page sizes (tens of rows, not thousands).
  * STOCK_ADJUSTMENT/SYSTEM references point at the product itself (see
- * stockAdjustment.service.ts / openingStock.service.ts), so there is no
+ * stockAdjustment.service.ts, and legacy opening-stock rows), so there is no
  * separate document to resolve — they're left as just the type label.
  */
 async function resolveReferenceNumbers(
@@ -597,7 +620,10 @@ export async function getInventoryLedgerReport(
 
   const referenceNumbers = await resolveReferenceNumbers(
     tenantId,
-    transactions.map((t) => ({ referenceType: t.referenceType as ReferenceType, referenceId: t.referenceId }))
+    transactions.map((t) => ({
+      referenceType: t.referenceType as ReferenceType,
+      referenceId: t.referenceId,
+    }))
   );
 
   const rows = transactions.map((txn) => {
@@ -647,7 +673,10 @@ export async function getInventoryLedgerReport(
  * estimate; a real FIFO/weighted-average costing engine is a separate,
  * larger feature.
  */
-export async function getProfitSummary(tenantId: Types.ObjectId, query: Partial<ProfitReportQuery>) {
+export async function getProfitSummary(
+  tenantId: Types.ObjectId,
+  query: Partial<ProfitReportQuery>
+) {
   const saleDateRange = buildDateRangeFilter(query.fromDate, query.toDate);
   const saleMatch: Record<string, unknown> = { tenantId };
   if (saleDateRange) saleMatch.saleDate = saleDateRange;
@@ -668,7 +697,9 @@ export async function getProfitSummary(tenantId: Types.ObjectId, query: Partial<
       { $lookup: { from: 'sales', localField: 'saleId', foreignField: '_id', as: 'sale' } },
       { $unwind: '$sale' },
       { $match: saleDateRange ? { 'sale.saleDate': saleDateRange } : {} },
-      { $lookup: { from: 'products', localField: 'productId', foreignField: '_id', as: 'product' } },
+      {
+        $lookup: { from: 'products', localField: 'productId', foreignField: '_id', as: 'product' },
+      },
       { $unwind: '$product' },
       {
         $group: {
@@ -811,7 +842,14 @@ export async function getExpenseReport(
     Expense.aggregate([
       { $match: match },
       { $group: { _id: '$categoryId', amount: { $sum: '$amount' }, count: { $sum: 1 } } },
-      { $lookup: { from: 'expensecategories', localField: '_id', foreignField: '_id', as: 'category' } },
+      {
+        $lookup: {
+          from: 'expensecategories',
+          localField: '_id',
+          foreignField: '_id',
+          as: 'category',
+        },
+      },
       { $unwind: '$category' },
       { $sort: { amount: -1 } },
       {

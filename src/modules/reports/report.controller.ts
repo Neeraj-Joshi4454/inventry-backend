@@ -61,12 +61,14 @@ export const getProfitSummaryHandler = asyncHandler(async (req: Request, res: Re
   sendSuccess(res, 200, 'Profit summary fetched successfully', result);
 });
 
-export const getOutstandingCustomersReportHandler = asyncHandler(async (req: Request, res: Response) => {
-  const query = req.query as unknown as OutstandingCustomersReportQuery;
-  const pagination = getPaginationParams(query);
-  const result = await getOutstandingCustomersReport(req.user!.tenantId!, query, pagination);
-  sendSuccess(res, 200, 'Outstanding customers report fetched successfully', result);
-});
+export const getOutstandingCustomersReportHandler = asyncHandler(
+  async (req: Request, res: Response) => {
+    const query = req.query as unknown as OutstandingCustomersReportQuery;
+    const pagination = getPaginationParams(query);
+    const result = await getOutstandingCustomersReport(req.user!.tenantId!, query, pagination);
+    sendSuccess(res, 200, 'Outstanding customers report fetched successfully', result);
+  }
+);
 
 export const getExpenseReportHandler = asyncHandler(async (req: Request, res: Response) => {
   const query = req.query as unknown as ExpenseReportQuery;

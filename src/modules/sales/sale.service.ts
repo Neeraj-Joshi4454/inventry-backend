@@ -4,11 +4,15 @@ import { Product } from '../../models/product.model';
 import { Customer } from '../../models/party.model';
 import { CustomerPayment } from '../../models/customerPayment.model';
 import { Tenant } from '../../models/tenant.model';
-import { getReturnedQuantitiesBySaleItem } from './saleReturn.service';
 import { applyStockChange } from '../inventory/inventory.service';
 import { getEffectiveTaxConfig } from '../taxes/tax.service';
 import { calculateDocumentTax, resolveTaxSplit } from '../taxes/taxCalculation.service';
-import { InventoryTransactionType, PaymentMethod, PaymentStatus, ReferenceType } from '../../types/enums';
+import {
+  InventoryTransactionType,
+  PaymentMethod,
+  PaymentStatus,
+  ReferenceType,
+} from '../../types/enums';
 import { AuditAction } from '../../constants/auditActions';
 import { BadRequestError, NotFoundError } from '../../utils/errors';
 import { escapeRegex } from '../../utils/queryFilters';
@@ -191,6 +195,7 @@ export async function createSale(params: {
             amount: paidAmount,
             method: input.paymentMethod ?? PaymentMethod.CASH,
             paymentDate: input.saleDate ?? new Date(),
+            referenceNumber: input.paymentReference || undefined,
             notes: 'Initial payment at sale',
             recordedBy: userId,
           },
@@ -206,7 +211,9 @@ export async function createSale(params: {
       action: AuditAction.SALE_CREATED,
       entityType: 'Sale',
       entityId: sale._id,
-      changes: { after: { saleNumber, totalAmount: taxResult.totalAmount, itemCount: lineItems.length } },
+      changes: {
+        after: { saleNumber, totalAmount: taxResult.totalAmount, itemCount: lineItems.length },
+      },
       ipAddress,
       session,
     });
@@ -267,24 +274,11 @@ export async function getSaleById(tenantId: Types.ObjectId, saleId: string) {
     populate: { path: 'unitId', select: 'name symbol' },
   });
 
-  // Enrich each line with return tracking (see saleReturn.service.ts) so
-  // the Sale Details → Return Items screen has everything it needs
-  // without a second round trip.
-  const returnedByItem = await getReturnedQuantitiesBySaleItem(tenantId, sale._id);
-  const itemsWithReturns = items.map((item) => {
-    const returnedQuantity = returnedByItem.get(item._id.toString()) ?? 0;
-    return {
-      ...item.toJSON(),
-      returnedQuantity,
-      remainingReturnable: item.quantity - returnedQuantity,
-    };
-  });
-
   const payments = await CustomerPayment.find({ tenantId, saleId: sale._id })
     .sort({ paymentDate: -1 })
     .populate('recordedBy', 'name');
 
-  return { sale, items: itemsWithReturns, payments };
+  return { sale, items, payments };
 }
 
 /**
@@ -323,14 +317,15 @@ export async function getSaleInvoiceData(tenantId: Types.ObjectId, saleId: strin
     | {
         businessName?: string;
         address?: unknown;
+        mobileNumber?: string;
+        email?: string;
         gstNumber?: string;
         invoicePrefix?: string;
         invoiceFooterNote?: string;
       }
     | undefined;
   const customerJson = (sale.customerId as { toJSON?: () => unknown } | null)?.toJSON?.() as
-    | { name?: string; address?: unknown; gstNumber?: string }
-    | undefined;
+    { name?: string; address?: unknown; gstNumber?: string } | undefined;
 
   const itemsData = items.map((item) => {
     const itemJson = item.toJSON() as unknown as {
@@ -383,6 +378,8 @@ export async function getSaleInvoiceData(tenantId: Types.ObjectId, saleId: strin
     business: {
       name: tenantJson?.businessName ?? null,
       address: tenantJson?.address ?? null,
+      phone: tenantJson?.mobileNumber ?? null,
+      email: tenantJson?.email ?? null,
       gstin: taxConfig.gstin ?? tenantJson?.gstNumber ?? null,
       invoicePrefix: tenantJson?.invoicePrefix ?? null,
       invoiceFooterNote: tenantJson?.invoiceFooterNote ?? null,

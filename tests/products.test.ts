@@ -3,10 +3,12 @@ import request from 'supertest';
 import { createApp } from '../src/app';
 import { clearTestDb, connectTestDb, disconnectTestDb } from './helpers/db';
 import {
+  createProductViaApi,
   createSuperAdminDirect,
   createTenantWithOwnerViaApi,
   loginOrThrow,
   nextMobileNumber,
+  stockViaPurchase,
 } from './helpers/factories';
 
 const app = createApp();
@@ -257,11 +259,7 @@ describe('PATCH /api/v1/products/:id', () => {
       .expect(201);
     const productId = createRes.body.data._id as string;
 
-    await request(app)
-      .post('/api/v1/inventory/opening-stock')
-      .set('Authorization', `Bearer ${owner.accessToken}`)
-      .send({ productId, quantity: 500 })
-      .expect(201);
+    await stockViaPurchase(app, owner.accessToken, productId, 500);
 
     await request(app)
       .patch(`/api/v1/products/${productId}`)
@@ -322,14 +320,26 @@ describe('tenant isolation for products/categories/units', () => {
     const productB = await request(app)
       .post('/api/v1/products')
       .set('Authorization', `Bearer ${ownerB.accessToken}`)
-      .send({ name: 'Tenant B Product', sku: 'TB-001', categoryId: categoryB, unitId: unitB, lowStockThreshold: 10 })
+      .send({
+        name: 'Tenant B Product',
+        sku: 'TB-001',
+        categoryId: categoryB,
+        unitId: unitB,
+        lowStockThreshold: 10,
+      })
       .expect(201);
 
     // Owner A cannot create a product using Tenant B's category/unit ids.
     const crossTenantCreate = await request(app)
       .post('/api/v1/products')
       .set('Authorization', `Bearer ${ownerA.accessToken}`)
-      .send({ name: 'Sneaky', sku: 'SNEAKY-1', categoryId: categoryB, unitId: unitB, lowStockThreshold: 10 });
+      .send({
+        name: 'Sneaky',
+        sku: 'SNEAKY-1',
+        categoryId: categoryB,
+        unitId: unitB,
+        lowStockThreshold: 10,
+      });
     expect(crossTenantCreate.status).toBe(400);
 
     // Owner A cannot edit Tenant B's product.
@@ -398,4 +408,64 @@ describe('category and unit create endpoints', () => {
     expect(res.status).toBe(201);
     expect(res.body.data.symbol).toBe('ltr');
   });
+});
+
+describe('DELETE /api/v1/categories/:id and /api/v1/units/:id', () => {
+  for (const kind of ['categories', 'units'] as const) {
+    it(`deletes an unused ${kind} entry so it leaves the list and its name can be reused`, async () => {
+      const { owner } = await setupTenantOwner();
+      const body =
+        kind === 'categories' ? { name: 'Temp Entry' } : { name: 'Temp Entry', symbol: 'tmp' };
+      const created = await request(app)
+        .post(`/api/v1/${kind}`)
+        .set('Authorization', `Bearer ${owner.accessToken}`)
+        .send(body)
+        .expect(201);
+
+      await request(app)
+        .delete(`/api/v1/${kind}/${created.body.data._id}`)
+        .set('Authorization', `Bearer ${owner.accessToken}`)
+        .expect(200);
+
+      const list = await request(app)
+        .get(`/api/v1/${kind}`)
+        .set('Authorization', `Bearer ${owner.accessToken}`);
+      expect(list.body.data.some((e: { name: string }) => e.name === 'Temp Entry')).toBe(false);
+
+      await request(app)
+        .post(`/api/v1/${kind}`)
+        .set('Authorization', `Bearer ${owner.accessToken}`)
+        .send(body)
+        .expect(201);
+    });
+
+    it(`refuses to delete a ${kind} entry that a product still uses (409)`, async () => {
+      const { owner } = await setupTenantOwner();
+      // createProductViaApi uses the first entry of each list.
+      await createProductViaApi(app, owner.accessToken);
+      const list = await request(app)
+        .get(`/api/v1/${kind}`)
+        .set('Authorization', `Bearer ${owner.accessToken}`);
+
+      const res = await request(app)
+        .delete(`/api/v1/${kind}/${list.body.data[0]._id}`)
+        .set('Authorization', `Bearer ${owner.accessToken}`);
+
+      expect(res.status).toBe(409);
+      expect(res.body.message).toMatch(/1 product uses/);
+    });
+
+    it(`cannot delete another tenant's ${kind} entry (404)`, async () => {
+      const { owner: ownerA } = await setupTenantOwner();
+      const { owner: ownerB } = await setupTenantOwner();
+      const listB = await request(app)
+        .get(`/api/v1/${kind}`)
+        .set('Authorization', `Bearer ${ownerB.accessToken}`);
+
+      await request(app)
+        .delete(`/api/v1/${kind}/${listB.body.data[0]._id}`)
+        .set('Authorization', `Bearer ${ownerA.accessToken}`)
+        .expect(404);
+    });
+  }
 });

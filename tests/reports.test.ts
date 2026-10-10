@@ -10,6 +10,7 @@ import {
   createTenantWithOwnerViaApi,
   loginOrThrow,
   nextMobileNumber,
+  stockViaPurchase,
 } from './helpers/factories';
 
 const app = createApp();
@@ -28,11 +29,7 @@ async function setupTenantOwner() {
 }
 
 async function stockProduct(owner: { accessToken: string }, productId: string, quantity: number) {
-  await request(app)
-    .post('/api/v1/inventory/opening-stock')
-    .set('Authorization', `Bearer ${owner.accessToken}`)
-    .send({ productId, quantity })
-    .expect(201);
+  await stockViaPurchase(app, owner.accessToken, productId, quantity);
 }
 
 describe('GET /api/v1/reports/dashboard', () => {
@@ -50,7 +47,6 @@ describe('GET /api/v1/reports/dashboard', () => {
     expect(res.body.data.outOfStockProducts).toBe(0);
     expect(res.body.data.todaysSales.amount).toBe(0);
     expect(res.body.data.todaysPurchases.amount).toBe(0);
-    expect(res.body.data.todaysReturns.amount).toBe(0);
   });
 
   it('reflects products, stock value, low/out-of-stock counts, and today activity', async () => {
@@ -75,18 +71,27 @@ describe('GET /api/v1/reports/dashboard', () => {
     await stockProduct(owner, low._id, 20); // value = 20*10 = 200
 
     // Never stocked -> out of stock, contributes 0 value.
-    await createProductViaApi(app, owner.accessToken, { name: 'Never Stocked', purchasePrice: 999 });
+    await createProductViaApi(app, owner.accessToken, {
+      name: 'Never Stocked',
+      purchasePrice: 999,
+    });
 
     // Today's sale and purchase.
     await request(app)
       .post('/api/v1/sales')
       .set('Authorization', `Bearer ${owner.accessToken}`)
-      .send({ customerId: customer._id, items: [{ productId: healthy._id, quantity: 10, unitPrice: 150 }] })
+      .send({
+        customerId: customer._id,
+        items: [{ productId: healthy._id, quantity: 10, unitPrice: 150 }],
+      })
       .expect(201);
     await request(app)
       .post('/api/v1/purchases')
       .set('Authorization', `Bearer ${owner.accessToken}`)
-      .send({ supplierId: supplier._id, items: [{ productId: low._id, quantity: 5, unitPrice: 10 }] })
+      .send({
+        supplierId: supplier._id,
+        items: [{ productId: low._id, quantity: 5, unitPrice: 10 }],
+      })
       .expect(201);
 
     const res = await request(app)
@@ -101,7 +106,9 @@ describe('GET /api/v1/reports/dashboard', () => {
     expect(res.body.data.outOfStockProducts).toBe(1);
     expect(res.body.data.todaysSales.count).toBe(1);
     expect(res.body.data.todaysSales.amount).toBe(1500);
-    expect(res.body.data.todaysPurchases.count).toBe(1);
+    // The two zero-priced stocking purchases above count too — purchases are
+    // now the only way stock enters inventory.
+    expect(res.body.data.todaysPurchases.count).toBe(3);
     expect(res.body.data.todaysPurchases.amount).toBe(50);
   });
 
@@ -300,16 +307,21 @@ describe('GET /api/v1/reports/inventory-ledger', () => {
     const supplier = await createSupplierViaApi(app, owner.accessToken);
     const product = await createProductViaApi(app, owner.accessToken, { name: 'Cement' });
 
-    await stockProduct(owner, product._id, 500); // OPENING_STOCK
     const purchaseRes = await request(app)
       .post('/api/v1/purchases')
       .set('Authorization', `Bearer ${owner.accessToken}`)
-      .send({ supplierId: supplier._id, items: [{ productId: product._id, quantity: 200, unitPrice: 380 }] })
+      .send({
+        supplierId: supplier._id,
+        items: [{ productId: product._id, quantity: 700, unitPrice: 380 }],
+      })
       .expect(201);
     const saleRes = await request(app)
       .post('/api/v1/sales')
       .set('Authorization', `Bearer ${owner.accessToken}`)
-      .send({ customerId: customer._id, items: [{ productId: product._id, quantity: 100, unitPrice: 420 }] })
+      .send({
+        customerId: customer._id,
+        items: [{ productId: product._id, quantity: 100, unitPrice: 420 }],
+      })
       .expect(201);
 
     const res = await request(app)
@@ -317,8 +329,8 @@ describe('GET /api/v1/reports/inventory-ledger', () => {
       .set('Authorization', `Bearer ${owner.accessToken}`);
 
     expect(res.status).toBe(200);
-    expect(res.body.data.transactions).toHaveLength(3);
-    expect(res.body.data.summary.totalIn).toBe(700); // 500 opening + 200 purchase
+    expect(res.body.data.transactions).toHaveLength(2);
+    expect(res.body.data.summary.totalIn).toBe(700); // 700 purchase
     expect(res.body.data.summary.totalOut).toBe(100); // 100 sale
 
     const saleTxn = res.body.data.transactions.find((t: { type: string }) => t.type === 'SALE');
@@ -329,13 +341,10 @@ describe('GET /api/v1/reports/inventory-ledger', () => {
     expect(saleTxn.reference.number).toBe(saleRes.body.data.saleNumber);
     expect(saleTxn.createdBy.name).toBeDefined();
 
-    const purchaseTxn = res.body.data.transactions.find((t: { type: string }) => t.type === 'PURCHASE');
+    const purchaseTxn = res.body.data.transactions.find(
+      (t: { type: string }) => t.type === 'PURCHASE'
+    );
     expect(purchaseTxn.reference.number).toBe(purchaseRes.body.data.purchaseNumber);
-
-    const openingTxn = res.body.data.transactions.find((t: { type: string }) => t.type === 'OPENING_STOCK');
-    // Opening stock references the product itself, not a separate document —
-    // no reference number to resolve.
-    expect(openingTxn.reference.number).toBeNull();
 
     const typeFiltered = await request(app)
       .get(`/api/v1/reports/inventory-ledger?productId=${product._id}&type=SALE`)
@@ -368,7 +377,10 @@ describe('GET /api/v1/reports/profit', () => {
     await request(app)
       .post('/api/v1/sales')
       .set('Authorization', `Bearer ${owner.accessToken}`)
-      .send({ customerId: customer._id, items: [{ productId: product._id, quantity: 100, unitPrice: 420 }] })
+      .send({
+        customerId: customer._id,
+        items: [{ productId: product._id, quantity: 100, unitPrice: 420 }],
+      })
       .expect(201);
 
     const res = await request(app)
@@ -404,7 +416,10 @@ describe('GET /api/v1/reports/profit', () => {
     await request(app)
       .post('/api/v1/sales')
       .set('Authorization', `Bearer ${owner.accessToken}`)
-      .send({ customerId: customer._id, items: [{ productId: product._id, quantity: 100, unitPrice: 420 }] })
+      .send({
+        customerId: customer._id,
+        items: [{ productId: product._id, quantity: 100, unitPrice: 420 }],
+      })
       .expect(201);
 
     const res = await request(app)
@@ -427,7 +442,10 @@ describe('reports: pagination', () => {
       await request(app)
         .post('/api/v1/sales')
         .set('Authorization', `Bearer ${owner.accessToken}`)
-        .send({ customerId: customer._id, items: [{ productId: product._id, quantity: 1, unitPrice: 10 }] })
+        .send({
+          customerId: customer._id,
+          items: [{ productId: product._id, quantity: 1, unitPrice: 10 }],
+        })
         .expect(201);
     }
 
@@ -468,12 +486,18 @@ describe('tenant isolation for reports', () => {
     await request(app)
       .post('/api/v1/sales')
       .set('Authorization', `Bearer ${ownerB.accessToken}`)
-      .send({ customerId: customerB._id, items: [{ productId: productB._id, quantity: 100, unitPrice: 90 }] })
+      .send({
+        customerId: customerB._id,
+        items: [{ productId: productB._id, quantity: 100, unitPrice: 90 }],
+      })
       .expect(201);
     await request(app)
       .post('/api/v1/purchases')
       .set('Authorization', `Bearer ${ownerB.accessToken}`)
-      .send({ supplierId: supplierB._id, items: [{ productId: productB._id, quantity: 50, unitPrice: 50 }] })
+      .send({
+        supplierId: supplierB._id,
+        items: [{ productId: productB._id, quantity: 50, unitPrice: 50 }],
+      })
       .expect(201);
 
     // Tenant A's dashboard must be entirely zeroed despite Tenant B's activity.

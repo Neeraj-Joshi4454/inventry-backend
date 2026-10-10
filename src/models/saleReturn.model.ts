@@ -37,7 +37,12 @@ applyDecimalToJson(saleReturnSchema);
 const saleReturnItemSchema = new Schema(
   {
     tenantId: { type: Schema.Types.ObjectId, ref: 'Tenant', required: true, immutable: true },
-    saleReturnId: { type: Schema.Types.ObjectId, ref: 'SaleReturn', required: true, immutable: true },
+    saleReturnId: {
+      type: Schema.Types.ObjectId,
+      ref: 'SaleReturn',
+      required: true,
+      immutable: true,
+    },
     // Denormalized off the parent SaleReturn so "how much of this line has
     // been returned across all returns" can be aggregated directly against
     // this collection without a join.

@@ -9,6 +9,7 @@ import {
   createTenantWithOwnerViaApi,
   loginOrThrow,
   nextMobileNumber,
+  stockViaPurchase,
 } from './helpers/factories';
 
 const app = createApp();
@@ -27,11 +28,7 @@ async function setupTenantOwner() {
 }
 
 async function stockProduct(owner: { accessToken: string }, productId: string, quantity: number) {
-  await request(app)
-    .post('/api/v1/inventory/opening-stock')
-    .set('Authorization', `Bearer ${owner.accessToken}`)
-    .send({ productId, quantity })
-    .expect(201);
+  await stockViaPurchase(app, owner.accessToken, productId, quantity);
 }
 
 describe('Low stock / out of stock notifications', () => {
@@ -45,7 +42,10 @@ describe('Low stock / out of stock notifications', () => {
     await request(app)
       .post('/api/v1/sales')
       .set('Authorization', `Bearer ${owner.accessToken}`)
-      .send({ customerId: customer._id, items: [{ productId: product._id, quantity: 5, unitPrice: 10 }] })
+      .send({
+        customerId: customer._id,
+        items: [{ productId: product._id, quantity: 5, unitPrice: 10 }],
+      })
       .expect(201);
 
     const afterLow = await request(app)
@@ -58,7 +58,10 @@ describe('Low stock / out of stock notifications', () => {
     await request(app)
       .post('/api/v1/sales')
       .set('Authorization', `Bearer ${owner.accessToken}`)
-      .send({ customerId: customer._id, items: [{ productId: product._id, quantity: 5, unitPrice: 10 }] })
+      .send({
+        customerId: customer._id,
+        items: [{ productId: product._id, quantity: 5, unitPrice: 10 }],
+      })
       .expect(201);
 
     const afterOut = await request(app)
@@ -79,12 +82,18 @@ describe('Low stock / out of stock notifications', () => {
     await request(app)
       .post('/api/v1/sales')
       .set('Authorization', `Bearer ${owner.accessToken}`)
-      .send({ customerId: customer._id, items: [{ productId: product._id, quantity: 10, unitPrice: 10 }] })
+      .send({
+        customerId: customer._id,
+        items: [{ productId: product._id, quantity: 10, unitPrice: 10 }],
+      })
       .expect(201);
     await request(app)
       .post('/api/v1/sales')
       .set('Authorization', `Bearer ${owner.accessToken}`)
-      .send({ customerId: customer._id, items: [{ productId: product._id, quantity: 10, unitPrice: 10 }] })
+      .send({
+        customerId: customer._id,
+        items: [{ productId: product._id, quantity: 10, unitPrice: 10 }],
+      })
       .expect(201);
 
     const res = await request(app)
@@ -132,7 +141,10 @@ describe('Low stock / out of stock notifications', () => {
     await request(app)
       .post('/api/v1/sales')
       .set('Authorization', `Bearer ${ownerA.accessToken}`)
-      .send({ customerId: customer._id, items: [{ productId: product._id, quantity: 1, unitPrice: 10 }] })
+      .send({
+        customerId: customer._id,
+        items: [{ productId: product._id, quantity: 1, unitPrice: 10 }],
+      })
       .expect(201);
 
     const listA = await request(app)
@@ -237,7 +249,10 @@ describe('CSV exports', () => {
     await request(app)
       .post('/api/v1/sales')
       .set('Authorization', `Bearer ${ownerA.accessToken}`)
-      .send({ customerId: customerA._id, items: [{ productId: productA._id, quantity: 1, unitPrice: 500 }] })
+      .send({
+        customerId: customerA._id,
+        items: [{ productId: productA._id, quantity: 1, unitPrice: 500 }],
+      })
       .expect(201);
 
     const customerB = await createCustomerViaApi(app, ownerB.accessToken, 'Export Customer B');
@@ -246,7 +261,10 @@ describe('CSV exports', () => {
     await request(app)
       .post('/api/v1/sales')
       .set('Authorization', `Bearer ${ownerB.accessToken}`)
-      .send({ customerId: customerB._id, items: [{ productId: productB._id, quantity: 1, unitPrice: 999 }] })
+      .send({
+        customerId: customerB._id,
+        items: [{ productId: productB._id, quantity: 1, unitPrice: 999 }],
+      })
       .expect(201);
 
     const res = await request(app)
@@ -270,7 +288,10 @@ describe('CSV exports', () => {
     await request(app)
       .post('/api/v1/sales')
       .set('Authorization', `Bearer ${owner.accessToken}`)
-      .send({ customerId: customer._id, items: [{ productId: product._id, quantity: 1, unitPrice: 100 }] })
+      .send({
+        customerId: customer._id,
+        items: [{ productId: product._id, quantity: 1, unitPrice: 100 }],
+      })
       .expect(201);
 
     const res = await request(app)
@@ -299,10 +320,18 @@ describe('CSV exports', () => {
     await createCustomerViaApi(app, owner.accessToken, 'CSV Customer');
 
     const [purchasesCsv, inventoryCsv, customersCsv, suppliersCsv] = await Promise.all([
-      request(app).get('/api/v1/exports/purchases').set('Authorization', `Bearer ${owner.accessToken}`),
-      request(app).get('/api/v1/exports/inventory').set('Authorization', `Bearer ${owner.accessToken}`),
-      request(app).get('/api/v1/exports/customers').set('Authorization', `Bearer ${owner.accessToken}`),
-      request(app).get('/api/v1/exports/suppliers').set('Authorization', `Bearer ${owner.accessToken}`),
+      request(app)
+        .get('/api/v1/exports/purchases')
+        .set('Authorization', `Bearer ${owner.accessToken}`),
+      request(app)
+        .get('/api/v1/exports/inventory')
+        .set('Authorization', `Bearer ${owner.accessToken}`),
+      request(app)
+        .get('/api/v1/exports/customers')
+        .set('Authorization', `Bearer ${owner.accessToken}`),
+      request(app)
+        .get('/api/v1/exports/suppliers')
+        .set('Authorization', `Bearer ${owner.accessToken}`),
     ]);
 
     expect(purchasesCsv.text).toContain('CSV Supplier');

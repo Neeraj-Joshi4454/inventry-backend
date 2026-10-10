@@ -212,38 +212,54 @@ export async function getExpenseSummary(tenantId: Types.ObjectId) {
 
   const activeMatch = { tenantId, status: ExpenseStatus.ACTIVE };
 
-  const [todayAgg, monthAgg, totalAgg, prevMonthAgg, byCategoryAgg, byMethodAgg] = await Promise.all([
-    Expense.aggregate([
-      { $match: { ...activeMatch, expenseDate: { $gte: todayStart, $lt: todayEnd } } },
-      { $group: { _id: null, count: { $sum: 1 }, amount: { $sum: '$amount' } } },
-    ]),
-    Expense.aggregate([
-      { $match: { ...activeMatch, expenseDate: { $gte: monthStart, $lt: monthEnd } } },
-      { $group: { _id: null, count: { $sum: 1 }, amount: { $sum: '$amount' } } },
-    ]),
-    Expense.aggregate([
-      { $match: activeMatch },
-      { $group: { _id: null, count: { $sum: 1 }, amount: { $sum: '$amount' } } },
-    ]),
-    Expense.aggregate([
-      { $match: { ...activeMatch, expenseDate: { $gte: prevMonthStart, $lt: prevMonthEnd } } },
-      { $group: { _id: null, count: { $sum: 1 }, amount: { $sum: '$amount' } } },
-    ]),
-    Expense.aggregate([
-      { $match: activeMatch },
-      { $group: { _id: '$categoryId', amount: { $sum: '$amount' }, count: { $sum: 1 } } },
-      { $lookup: { from: 'expensecategories', localField: '_id', foreignField: '_id', as: 'category' } },
-      { $unwind: '$category' },
-      { $sort: { amount: -1 } },
-      { $project: { _id: 0, categoryId: '$_id', categoryName: '$category.name', amount: 1, count: 1 } },
-    ]),
-    Expense.aggregate([
-      { $match: activeMatch },
-      { $group: { _id: '$paymentMethod', amount: { $sum: '$amount' }, count: { $sum: 1 } } },
-      { $sort: { amount: -1 } },
-      { $project: { _id: 0, paymentMethod: '$_id', amount: 1, count: 1 } },
-    ]),
-  ]);
+  const [todayAgg, monthAgg, totalAgg, prevMonthAgg, byCategoryAgg, byMethodAgg] =
+    await Promise.all([
+      Expense.aggregate([
+        { $match: { ...activeMatch, expenseDate: { $gte: todayStart, $lt: todayEnd } } },
+        { $group: { _id: null, count: { $sum: 1 }, amount: { $sum: '$amount' } } },
+      ]),
+      Expense.aggregate([
+        { $match: { ...activeMatch, expenseDate: { $gte: monthStart, $lt: monthEnd } } },
+        { $group: { _id: null, count: { $sum: 1 }, amount: { $sum: '$amount' } } },
+      ]),
+      Expense.aggregate([
+        { $match: activeMatch },
+        { $group: { _id: null, count: { $sum: 1 }, amount: { $sum: '$amount' } } },
+      ]),
+      Expense.aggregate([
+        { $match: { ...activeMatch, expenseDate: { $gte: prevMonthStart, $lt: prevMonthEnd } } },
+        { $group: { _id: null, count: { $sum: 1 }, amount: { $sum: '$amount' } } },
+      ]),
+      Expense.aggregate([
+        { $match: activeMatch },
+        { $group: { _id: '$categoryId', amount: { $sum: '$amount' }, count: { $sum: 1 } } },
+        {
+          $lookup: {
+            from: 'expensecategories',
+            localField: '_id',
+            foreignField: '_id',
+            as: 'category',
+          },
+        },
+        { $unwind: '$category' },
+        { $sort: { amount: -1 } },
+        {
+          $project: {
+            _id: 0,
+            categoryId: '$_id',
+            categoryName: '$category.name',
+            amount: 1,
+            count: 1,
+          },
+        },
+      ]),
+      Expense.aggregate([
+        { $match: activeMatch },
+        { $group: { _id: '$paymentMethod', amount: { $sum: '$amount' }, count: { $sum: 1 } } },
+        { $sort: { amount: -1 } },
+        { $project: { _id: 0, paymentMethod: '$_id', amount: 1, count: 1 } },
+      ]),
+    ]);
 
   const today = todayAgg[0] ?? { count: 0, amount: 0 };
   const month = monthAgg[0] ?? { count: 0, amount: 0 };
@@ -254,7 +270,11 @@ export async function getExpenseSummary(tenantId: Types.ObjectId) {
   const previousMonthAmount = toNumber(clean(prevMonth)?.amount);
   const change = currentMonthAmount - previousMonthAmount;
   const changePercent =
-    previousMonthAmount > 0 ? (change / previousMonthAmount) * 100 : currentMonthAmount > 0 ? 100 : 0;
+    previousMonthAmount > 0
+      ? (change / previousMonthAmount) * 100
+      : currentMonthAmount > 0
+        ? 100
+        : 0;
 
   return clean({
     todayExpenses: { count: today.count, amount: today.amount },

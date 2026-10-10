@@ -186,3 +186,28 @@ export async function createCustomerViaApi(app: Express, accessToken: string, na
 
   return res.body.data as { _id: string; name: string };
 }
+
+/**
+ * Puts stock on hand the way the app does: a zero-priced purchase from a
+ * fresh supplier, through the real API. Zero price keeps money totals
+ * (supplier balances, purchase reports) unaffected for tests that only
+ * need quantity to sell against.
+ */
+export async function stockViaPurchase(
+  app: Express,
+  accessToken: string,
+  productId: string,
+  quantity: number
+) {
+  const supplier = await createSupplierViaApi(app, accessToken);
+  const res = await request(app)
+    .post('/api/v1/purchases')
+    .set('Authorization', `Bearer ${accessToken}`)
+    .send({ supplierId: supplier._id, items: [{ productId, quantity, unitPrice: 0 }] });
+
+  if (res.status !== 201) {
+    throw new Error(`Expected purchase to succeed, got ${res.status}: ${JSON.stringify(res.body)}`);
+  }
+
+  return res.body.data;
+}

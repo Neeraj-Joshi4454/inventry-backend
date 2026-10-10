@@ -3,7 +3,11 @@ import { asyncHandler } from '../../utils/asyncHandler';
 import { sendPaginated, sendSuccess } from '../../utils/apiResponse';
 import { getPaginationParams } from '../../utils/pagination';
 import { createProduct, getProductById, listProducts, updateProduct } from './product.service';
-import type { CreateProductInput, ListProductsQuery, UpdateProductInput } from './product.validators';
+import type {
+  CreateProductInput,
+  ListProductsQuery,
+  UpdateProductInput,
+} from './product.validators';
 
 export const createProductHandler = asyncHandler(async (req: Request, res: Response) => {
   const product = await createProduct({

@@ -258,7 +258,7 @@ metadata; `Inventory` is the stock source of truth.
 // InventoryTransaction — append-only ledger, one doc per stock movement
 {
   tenantId, productId, inventoryId,
-  type: OPENING_STOCK|PURCHASE|SALE|SALE_RETURN|PURCHASE_RETURN|STOCK_ADJUSTMENT_IN|STOCK_ADJUSTMENT_OUT,
+  type: OPENING_STOCK (legacy, no longer written)|PURCHASE|SALE|SALE_RETURN|PURCHASE_RETURN|STOCK_ADJUSTMENT_IN|STOCK_ADJUSTMENT_OUT,
   quantity,           // always positive; direction is derived from `type`
   previousStock, resultingStock,
   referenceType: PURCHASE|SALE|STOCK_ADJUSTMENT|SYSTEM,

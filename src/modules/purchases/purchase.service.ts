@@ -4,7 +4,6 @@ import { Product } from '../../models/product.model';
 import { Supplier } from '../../models/party.model';
 import { InventoryTransaction } from '../../models/inventoryTransaction.model';
 import { Tenant } from '../../models/tenant.model';
-import { getReturnedQuantitiesByPurchaseItem } from './purchaseReturn.service';
 import { applyStockChange } from '../inventory/inventory.service';
 import { getEffectiveTaxConfig } from '../taxes/tax.service';
 import { calculateDocumentTax, resolveTaxSplit } from '../taxes/taxCalculation.service';
@@ -224,17 +223,14 @@ export async function getPurchaseById(tenantId: Types.ObjectId, purchaseId: stri
     populate: { path: 'unitId', select: 'name symbol' },
   });
 
-  const [returnedByItem, inventoryTransactions] = await Promise.all([
-    getReturnedQuantitiesByPurchaseItem(tenantId, purchase._id),
-    // The inventory impact of this purchase — one PURCHASE transaction per
-    // line item, created atomically alongside it (see createPurchase).
-    // Read-only lookup; never a second write path for stock.
-    InventoryTransaction.find({
-      tenantId,
-      referenceType: ReferenceType.PURCHASE,
-      referenceId: purchase._id,
-    }),
-  ]);
+  // The inventory impact of this purchase — one PURCHASE transaction per
+  // line item, created atomically alongside it (see createPurchase).
+  // Read-only lookup; never a second write path for stock.
+  const inventoryTransactions = await InventoryTransaction.find({
+    tenantId,
+    referenceType: ReferenceType.PURCHASE,
+    referenceId: purchase._id,
+  });
   const inventoryImpactByProduct = new Map(
     inventoryTransactions.map((txn) => [
       txn.productId.toString(),
@@ -242,18 +238,15 @@ export async function getPurchaseById(tenantId: Types.ObjectId, purchaseId: stri
     ])
   );
 
-  const itemsWithReturns = items.map((item) => {
-    const returnedQuantity = returnedByItem.get(item._id.toString()) ?? 0;
+  const itemsWithImpact = items.map((item) => {
     const product = item.productId as unknown as { _id: Types.ObjectId };
     return {
       ...item.toJSON(),
-      returnedQuantity,
-      remainingReturnable: item.quantity - returnedQuantity,
       inventoryImpact: inventoryImpactByProduct.get(product._id.toString()) ?? null,
     };
   });
 
-  return { purchase, items: itemsWithReturns };
+  return { purchase, items: itemsWithImpact };
 }
 
 /**
@@ -288,14 +281,15 @@ export async function getPurchaseInvoiceData(tenantId: Types.ObjectId, purchaseI
     | {
         businessName?: string;
         address?: unknown;
+        mobileNumber?: string;
+        email?: string;
         gstNumber?: string;
         invoicePrefix?: string;
         invoiceFooterNote?: string;
       }
     | undefined;
   const supplierJson = (purchase.supplierId as { toJSON?: () => unknown } | null)?.toJSON?.() as
-    | { name?: string; address?: unknown; gstNumber?: string }
-    | undefined;
+    { name?: string; address?: unknown; gstNumber?: string } | undefined;
 
   const itemsData = items.map((item) => {
     const itemJson = item.toJSON() as unknown as {
@@ -349,6 +343,8 @@ export async function getPurchaseInvoiceData(tenantId: Types.ObjectId, purchaseI
     business: {
       name: tenantJson?.businessName ?? null,
       address: tenantJson?.address ?? null,
+      phone: tenantJson?.mobileNumber ?? null,
+      email: tenantJson?.email ?? null,
       gstin: taxConfig.gstin ?? tenantJson?.gstNumber ?? null,
       invoicePrefix: tenantJson?.invoicePrefix ?? null,
       invoiceFooterNote: tenantJson?.invoiceFooterNote ?? null,

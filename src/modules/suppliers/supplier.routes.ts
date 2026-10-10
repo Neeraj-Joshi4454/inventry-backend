@@ -37,7 +37,12 @@ router.post(
   validate({ body: createSupplierSchema }),
   createSupplierHandler
 );
-router.get('/', requireRole(...READ_ROLES), validate({ query: listSuppliersQuerySchema }), listSuppliersHandler);
+router.get(
+  '/',
+  requireRole(...READ_ROLES),
+  validate({ query: listSuppliersQuerySchema }),
+  listSuppliersHandler
+);
 router.get(
   '/:id',
   requireRole(...READ_ROLES),

@@ -2,10 +2,7 @@ import { Router } from 'express';
 import { authenticate } from '../../middleware/auth.middleware';
 import { requireTenantContext, stripClientTenantId } from '../../middleware/tenant.middleware';
 import { validate } from '../../middleware/validation.middleware';
-import {
-  listNotificationsQuerySchema,
-  notificationIdParamSchema,
-} from './notification.validators';
+import { listNotificationsQuerySchema, notificationIdParamSchema } from './notification.validators';
 import {
   listNotificationsHandler,
   markAllNotificationsReadHandler,

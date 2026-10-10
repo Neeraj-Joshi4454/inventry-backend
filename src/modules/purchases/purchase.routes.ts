@@ -4,19 +4,15 @@ import { requireRole } from '../../middleware/role.middleware';
 import { requireTenantContext, stripClientTenantId } from '../../middleware/tenant.middleware';
 import { validate } from '../../middleware/validation.middleware';
 import { UserRole } from '../../types/enums';
-import { paginationQuerySchema } from '../../utils/pagination';
 import {
-  createPurchaseReturnSchema,
   createPurchaseSchema,
   listPurchasesQuerySchema,
   purchaseIdParamSchema,
 } from './purchase.validators';
 import {
   createPurchaseHandler,
-  createPurchaseReturnHandler,
   getPurchaseHandler,
   getPurchaseInvoiceHandler,
-  listPurchaseReturnsHandler,
   listPurchasesHandler,
 } from './purchase.controller';
 
@@ -52,20 +48,6 @@ router.get(
   requireRole(UserRole.OWNER, UserRole.MANAGER, UserRole.STORE_KEEPER, UserRole.ACCOUNTANT),
   validate({ params: purchaseIdParamSchema }),
   getPurchaseInvoiceHandler
-);
-
-router.post(
-  '/:id/returns',
-  requireRole(UserRole.OWNER, UserRole.MANAGER, UserRole.STORE_KEEPER),
-  validate({ params: purchaseIdParamSchema, body: createPurchaseReturnSchema }),
-  createPurchaseReturnHandler
-);
-
-router.get(
-  '/:id/returns',
-  requireRole(UserRole.OWNER, UserRole.MANAGER, UserRole.STORE_KEEPER, UserRole.ACCOUNTANT),
-  validate({ params: purchaseIdParamSchema, query: paginationQuerySchema }),
-  listPurchaseReturnsHandler
 );
 
 export default router;

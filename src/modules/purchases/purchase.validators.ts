@@ -35,18 +35,5 @@ export const purchaseIdParamSchema = z.object({
   id: z.string().min(1),
 });
 
-export const createPurchaseReturnSchema = z.object({
-  notes: z.string().optional(),
-  items: z
-    .array(
-      z.object({
-        purchaseItemId: z.string().min(1),
-        quantity: z.number().positive('Return quantity must be greater than zero'),
-      })
-    )
-    .min(1, 'A return must have at least one item'),
-});
-
 export type CreatePurchaseInput = z.infer<typeof createPurchaseSchema>;
-export type CreatePurchaseReturnInput = z.infer<typeof createPurchaseReturnSchema>;
 export type ListPurchasesQuery = z.infer<typeof listPurchasesQuerySchema>;

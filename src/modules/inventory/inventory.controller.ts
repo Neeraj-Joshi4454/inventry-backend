@@ -2,30 +2,14 @@ import type { Request, Response } from 'express';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { sendPaginated, sendSuccess } from '../../utils/apiResponse';
 import { getPaginationParams } from '../../utils/pagination';
-import { createOpeningStock } from './openingStock.service';
 import { createStockAdjustment } from './stockAdjustment.service';
 import {
   getInventoryByProduct,
   listInventory,
   listInventoryTransactions,
 } from './inventory.query.service';
-import type {
-  ListInventoryQuery,
-  ListTransactionsQuery,
-  OpeningStockInput,
-} from './inventory.validators';
+import type { ListInventoryQuery, ListTransactionsQuery } from './inventory.validators';
 import type { StockAdjustmentInput } from './stockAdjustment.validators';
-
-export const createOpeningStockHandler = asyncHandler(async (req: Request, res: Response) => {
-  const result = await createOpeningStock({
-    tenantId: req.user!.tenantId!,
-    userId: req.user!.userId,
-    userRole: req.user!.role,
-    input: req.body as OpeningStockInput,
-    ipAddress: req.ip,
-  });
-  sendSuccess(res, 201, 'Opening stock recorded successfully', result);
-});
 
 export const createStockAdjustmentHandler = asyncHandler(async (req: Request, res: Response) => {
   const result = await createStockAdjustment({

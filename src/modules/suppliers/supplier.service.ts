@@ -172,7 +172,14 @@ export async function getSupplierPurchaseHistory(
 
   const basePipeline: PipelineStage[] = [
     { $match: match },
-    { $lookup: { from: 'purchaseitems', localField: '_id', foreignField: 'purchaseId', as: 'items' } },
+    {
+      $lookup: {
+        from: 'purchaseitems',
+        localField: '_id',
+        foreignField: 'purchaseId',
+        as: 'items',
+      },
+    },
   ];
 
   const [summaryAgg, totalCountAgg, purchases] = await Promise.all([

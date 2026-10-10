@@ -5,7 +5,10 @@ import { requireTenantContext, stripClientTenantId } from '../../middleware/tena
 import { validate } from '../../middleware/validation.middleware';
 import { UserRole } from '../../types/enums';
 import { updateTenantSchema } from '../tenants/tenant.validators';
-import { getBusinessSettingsHandler, updateBusinessSettingsHandler } from './businessSettings.controller';
+import {
+  getBusinessSettingsHandler,
+  updateBusinessSettingsHandler,
+} from './businessSettings.controller';
 
 const router = Router();
 

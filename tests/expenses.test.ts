@@ -7,6 +7,7 @@ import {
   createTenantWithOwnerViaApi,
   loginOrThrow,
   nextMobileNumber,
+  stockViaPurchase,
 } from './helpers/factories';
 
 const app = createApp();
@@ -42,7 +43,16 @@ describe('GET /api/v1/expense-categories', () => {
     expect(res.status).toBe(200);
     const names = res.body.data.map((c: { name: string }) => c.name).sort();
     expect(names).toEqual(
-      ['Electricity', 'Internet', 'Maintenance', 'Office Supplies', 'Other', 'Rent', 'Salary', 'Transport'].sort()
+      [
+        'Electricity',
+        'Internet',
+        'Maintenance',
+        'Office Supplies',
+        'Other',
+        'Rent',
+        'Salary',
+        'Transport',
+      ].sort()
     );
     expect(res.body.data.every((c: { isSystem: boolean }) => c.isSystem)).toBe(true);
   });
@@ -160,13 +170,25 @@ describe('POST /api/v1/expenses', () => {
     const zero = await request(app)
       .post('/api/v1/expenses')
       .set('Authorization', `Bearer ${owner.accessToken}`)
-      .send({ title: 'Bad expense', categoryId, amount: 0, expenseDate: new Date().toISOString(), paymentMethod: 'CASH' });
+      .send({
+        title: 'Bad expense',
+        categoryId,
+        amount: 0,
+        expenseDate: new Date().toISOString(),
+        paymentMethod: 'CASH',
+      });
     expect(zero.status).toBe(400);
 
     const negative = await request(app)
       .post('/api/v1/expenses')
       .set('Authorization', `Bearer ${owner.accessToken}`)
-      .send({ title: 'Bad expense', categoryId, amount: -10, expenseDate: new Date().toISOString(), paymentMethod: 'CASH' });
+      .send({
+        title: 'Bad expense',
+        categoryId,
+        amount: -10,
+        expenseDate: new Date().toISOString(),
+        paymentMethod: 'CASH',
+      });
     expect(negative.status).toBe(400);
   });
 
@@ -177,7 +199,13 @@ describe('POST /api/v1/expenses', () => {
     const res = await request(app)
       .post('/api/v1/expenses')
       .set('Authorization', `Bearer ${owner.accessToken}`)
-      .send({ title: 'Bad date', categoryId, amount: 100, expenseDate: 'not-a-date', paymentMethod: 'CASH' });
+      .send({
+        title: 'Bad date',
+        categoryId,
+        amount: 100,
+        expenseDate: 'not-a-date',
+        paymentMethod: 'CASH',
+      });
     expect(res.status).toBe(400);
   });
 
@@ -233,7 +261,13 @@ describe('POST /api/v1/expenses', () => {
     const res = await request(app)
       .post('/api/v1/expenses')
       .set('Authorization', `Bearer ${salesPerson.accessToken}`)
-      .send({ title: 'Rent', categoryId, amount: 100, expenseDate: new Date().toISOString(), paymentMethod: 'CASH' });
+      .send({
+        title: 'Rent',
+        categoryId,
+        amount: 100,
+        expenseDate: new Date().toISOString(),
+        paymentMethod: 'CASH',
+      });
     expect(res.status).toBe(403);
   });
 
@@ -248,7 +282,13 @@ describe('POST /api/v1/expenses', () => {
     await request(app)
       .post('/api/v1/expenses')
       .set('Authorization', `Bearer ${owner.accessToken}`)
-      .send({ title: 'Rent', categoryId, amount: 100, expenseDate: new Date().toISOString(), paymentMethod: 'CASH' })
+      .send({
+        title: 'Rent',
+        categoryId,
+        amount: 100,
+        expenseDate: new Date().toISOString(),
+        paymentMethod: 'CASH',
+      })
       .expect(201);
 
     const after = await request(app)
@@ -267,7 +307,13 @@ describe('PATCH /api/v1/expenses/:id', () => {
     const created = await request(app)
       .post('/api/v1/expenses')
       .set('Authorization', `Bearer ${owner.accessToken}`)
-      .send({ title: 'Rent', categoryId, amount: 15000, expenseDate: new Date().toISOString(), paymentMethod: 'CASH' })
+      .send({
+        title: 'Rent',
+        categoryId,
+        amount: 15000,
+        expenseDate: new Date().toISOString(),
+        paymentMethod: 'CASH',
+      })
       .expect(201);
 
     const res = await request(app)
@@ -288,7 +334,13 @@ describe('PATCH /api/v1/expenses/:id', () => {
     const created = await request(app)
       .post('/api/v1/expenses')
       .set('Authorization', `Bearer ${owner.accessToken}`)
-      .send({ title: 'Rent', categoryId, amount: 5000, expenseDate: new Date().toISOString(), paymentMethod: 'CASH' })
+      .send({
+        title: 'Rent',
+        categoryId,
+        amount: 5000,
+        expenseDate: new Date().toISOString(),
+        paymentMethod: 'CASH',
+      })
       .expect(201);
 
     await request(app)
@@ -317,7 +369,9 @@ describe('GET /api/v1/expenses filters and pagination', () => {
       .get('/api/v1/expense-categories')
       .set('Authorization', `Bearer ${owner.accessToken}`);
     const rent = categories.body.data.find((c: { name: string }) => c.name === 'Rent')._id;
-    const electricity = categories.body.data.find((c: { name: string }) => c.name === 'Electricity')._id;
+    const electricity = categories.body.data.find(
+      (c: { name: string }) => c.name === 'Electricity'
+    )._id;
 
     await request(app)
       .post('/api/v1/expenses')
@@ -422,7 +476,13 @@ describe('GET /api/v1/expenses/summary', () => {
     await request(app)
       .post('/api/v1/expenses')
       .set('Authorization', `Bearer ${owner.accessToken}`)
-      .send({ title: 'Today Rent', categoryId: rent, amount: 1000, expenseDate: today, paymentMethod: 'CASH' })
+      .send({
+        title: 'Today Rent',
+        categoryId: rent,
+        amount: 1000,
+        expenseDate: today,
+        paymentMethod: 'CASH',
+      })
       .expect(201);
 
     const res = await request(app)
@@ -458,7 +518,9 @@ describe('GET /api/v1/reports/expenses', () => {
       .get('/api/v1/expense-categories')
       .set('Authorization', `Bearer ${owner.accessToken}`);
     const rent = categories.body.data.find((c: { name: string }) => c.name === 'Rent')._id;
-    const electricity = categories.body.data.find((c: { name: string }) => c.name === 'Electricity')._id;
+    const electricity = categories.body.data.find(
+      (c: { name: string }) => c.name === 'Electricity'
+    )._id;
 
     await request(app)
       .post('/api/v1/expenses')
@@ -528,11 +590,7 @@ describe('GET /api/v1/reports/profit — operating expenses and net profit', () 
       })
       .expect(201);
 
-    await request(app)
-      .post('/api/v1/inventory/opening-stock')
-      .set('Authorization', `Bearer ${owner.accessToken}`)
-      .send({ productId: productRes.body.data._id, quantity: 500 })
-      .expect(201);
+    await stockViaPurchase(app, owner.accessToken, productRes.body.data._id, 500);
 
     await request(app)
       .post('/api/v1/sales')
@@ -550,7 +608,13 @@ describe('GET /api/v1/reports/profit — operating expenses and net profit', () 
     await request(app)
       .post('/api/v1/expenses')
       .set('Authorization', `Bearer ${owner.accessToken}`)
-      .send({ title: 'Rent', categoryId: rent, amount: 2000, expenseDate: new Date().toISOString(), paymentMethod: 'CASH' })
+      .send({
+        title: 'Rent',
+        categoryId: rent,
+        amount: 2000,
+        expenseDate: new Date().toISOString(),
+        paymentMethod: 'CASH',
+      })
       .expect(201);
 
     const res = await request(app)
@@ -577,7 +641,13 @@ describe('tenant isolation for expenses', () => {
     const expense = await request(app)
       .post('/api/v1/expenses')
       .set('Authorization', `Bearer ${ownerB.accessToken}`)
-      .send({ title: 'B Rent', categoryId, amount: 1000, expenseDate: new Date().toISOString(), paymentMethod: 'CASH' })
+      .send({
+        title: 'B Rent',
+        categoryId,
+        amount: 1000,
+        expenseDate: new Date().toISOString(),
+        paymentMethod: 'CASH',
+      })
       .expect(201);
 
     const getRes = await request(app)

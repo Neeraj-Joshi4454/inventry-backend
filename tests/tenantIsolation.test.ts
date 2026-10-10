@@ -9,6 +9,7 @@ import {
   createTenantWithOwnerViaApi,
   loginOrThrow,
   nextMobileNumber,
+  stockViaPurchase,
 } from './helpers/factories';
 
 const app = createApp();
@@ -24,11 +25,7 @@ async function createSale(
 ) {
   const product = await createProductViaApi(app, accessToken);
   const customer = await createCustomerViaApi(app, accessToken);
-  await request(app)
-    .post('/api/v1/inventory/opening-stock')
-    .set('Authorization', `Bearer ${accessToken}`)
-    .send({ productId: product._id, quantity: 10 })
-    .expect(201);
+  await stockViaPurchase(app, accessToken, product._id, 10);
 
   return request(app)
     .post('/api/v1/sales')

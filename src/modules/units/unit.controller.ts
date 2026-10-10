@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { sendSuccess } from '../../utils/apiResponse';
-import { createUnit, listUnits } from './unit.service';
+import { createUnit, deleteUnit, listUnits } from './unit.service';
 import type { CreateUnitInput } from './unit.validators';
 
 export const listUnitsHandler = asyncHandler(async (req: Request, res: Response) => {
@@ -18,4 +18,15 @@ export const createUnitHandler = asyncHandler(async (req: Request, res: Response
     ipAddress: req.ip,
   });
   sendSuccess(res, 201, 'Unit created successfully', unit);
+});
+
+export const deleteUnitHandler = asyncHandler(async (req: Request, res: Response) => {
+  await deleteUnit({
+    tenantId: req.user!.tenantId!,
+    userId: req.user!.userId,
+    userRole: req.user!.role,
+    unitId: req.params.id as string,
+    ipAddress: req.ip,
+  });
+  sendSuccess(res, 200, 'Unit deleted successfully', null);
 });

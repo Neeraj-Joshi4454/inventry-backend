@@ -4,8 +4,8 @@ import { requireRole } from '../../middleware/role.middleware';
 import { requireTenantContext, stripClientTenantId } from '../../middleware/tenant.middleware';
 import { validate } from '../../middleware/validation.middleware';
 import { UserRole } from '../../types/enums';
-import { createUnitSchema } from './unit.validators';
-import { createUnitHandler, listUnitsHandler } from './unit.controller';
+import { createUnitSchema, unitIdParamSchema } from './unit.validators';
+import { createUnitHandler, deleteUnitHandler, listUnitsHandler } from './unit.controller';
 
 const router = Router();
 
@@ -17,6 +17,13 @@ router.post(
   requireRole(UserRole.OWNER, UserRole.MANAGER, UserRole.STORE_KEEPER),
   validate({ body: createUnitSchema }),
   createUnitHandler
+);
+
+router.delete(
+  '/:id',
+  requireRole(UserRole.OWNER, UserRole.MANAGER),
+  validate({ params: unitIdParamSchema }),
+  deleteUnitHandler
 );
 
 export default router;

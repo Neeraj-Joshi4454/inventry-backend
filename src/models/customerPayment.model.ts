@@ -16,6 +16,8 @@ const customerPaymentSchema = new Schema(
     amount: { type: Schema.Types.Decimal128, required: true },
     method: { type: String, enum: Object.values(PaymentMethod), required: true },
     paymentDate: { type: Date, required: true, default: Date.now },
+    // UPI transaction id, bank/UTR reference, card slip number, etc.
+    referenceNumber: { type: String, trim: true },
     notes: { type: String, trim: true },
     recordedBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
   },

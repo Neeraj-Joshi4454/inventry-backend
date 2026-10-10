@@ -7,12 +7,10 @@ import { UserRole } from '../../types/enums';
 import {
   listInventoryQuerySchema,
   listTransactionsQuerySchema,
-  openingStockSchema,
   productIdParamSchema,
 } from './inventory.validators';
 import { stockAdjustmentSchema } from './stockAdjustment.validators';
 import {
-  createOpeningStockHandler,
   createStockAdjustmentHandler,
   getInventoryHandler,
   listInventoryHandler,
@@ -32,13 +30,6 @@ const READ_ROLES = [
   UserRole.SALES_PERSON,
   UserRole.ACCOUNTANT,
 ] as const;
-
-router.post(
-  '/opening-stock',
-  requireRole(UserRole.OWNER, UserRole.MANAGER, UserRole.STORE_KEEPER),
-  validate({ body: openingStockSchema }),
-  createOpeningStockHandler
-);
 
 router.post(
   '/adjustments',

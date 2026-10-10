@@ -11,7 +11,11 @@ import { runInTransaction } from '../../utils/withTransaction';
 import { recordAuditLog } from '../auditLogs/auditLog.service';
 import type { ClientSession } from 'mongoose';
 import type { UserRole } from '../../types/enums';
-import type { CreateProductInput, ListProductsQuery, UpdateProductInput } from './product.validators';
+import type {
+  CreateProductInput,
+  ListProductsQuery,
+  UpdateProductInput,
+} from './product.validators';
 
 const PRODUCT_POPULATE = [
   { path: 'categoryId', select: 'name' },
@@ -54,8 +58,8 @@ async function assertSkuNotTaken(
  * creates the Product, and creates its Inventory record at currentStock: 0.
  *
  * Deliberately does NOT create an InventoryTransaction — a product existing
- * is not a stock event. Stock only ever enters the ledger through Opening
- * Stock, Purchase, Sale, Return, or Adjustment (inventory.service.ts).
+ * is not a stock event. Stock only ever enters the ledger through Purchase,
+ * Sale, Return, or Adjustment (inventory.service.ts).
  */
 export async function createProduct(params: {
   tenantId: Types.ObjectId;
@@ -174,7 +178,7 @@ export async function getProductById(tenantId: Types.ObjectId, productId: string
  * description. Never touches Inventory/currentStock: that field doesn't
  * even exist on this document (see inventory.model.ts), so there is
  * nothing here for an edit to accidentally corrupt. Stock changes only
- * ever happen through Opening Stock / Stock In / Sale / Return / Adjustment.
+ * ever happen through Purchase / Sale / Return / Adjustment.
  */
 export async function updateProduct(params: {
   tenantId: Types.ObjectId;

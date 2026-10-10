@@ -3,7 +3,10 @@
  * flat export tables this app produces (see modules/exports). Quotes a
  * cell only when it contains a comma, quote, or newline, per RFC 4180.
  */
-export function toCsv(headers: string[], rows: Array<Array<string | number | null | undefined>>): string {
+export function toCsv(
+  headers: string[],
+  rows: Array<Array<string | number | null | undefined>>
+): string {
   const escapeCell = (value: string | number | null | undefined): string => {
     if (value === null || value === undefined) return '';
     const str = String(value);

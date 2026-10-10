@@ -20,6 +20,8 @@ export const AccountStatus = {
 export type AccountStatus = (typeof AccountStatus)[keyof typeof AccountStatus];
 
 export const InventoryTransactionType = {
+  // Legacy: the Opening Stock flow has been removed (stock now only enters
+  // through Purchases). Kept so existing ledger rows still read and filter.
   OPENING_STOCK: 'OPENING_STOCK',
   PURCHASE: 'PURCHASE',
   SALE: 'SALE',

@@ -10,7 +10,11 @@ import { AuditAction } from '../../constants/auditActions';
 import { ConflictError, NotFoundError } from '../../utils/errors';
 import { hashPassword } from '../../utils/password';
 import { runInTransaction } from '../../utils/withTransaction';
-import { DEFAULT_CATEGORIES, DEFAULT_EXPENSE_CATEGORIES, DEFAULT_UNITS } from '../../constants/seedData';
+import {
+  DEFAULT_CATEGORIES,
+  DEFAULT_EXPENSE_CATEGORIES,
+  DEFAULT_UNITS,
+} from '../../constants/seedData';
 import { buildPaginationMeta, type PaginationParams } from '../../utils/pagination';
 import { buildSearchFilter, buildSortOption } from '../../utils/queryFilters';
 import { recordAuditLog } from '../auditLogs/auditLog.service';

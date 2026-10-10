@@ -9,6 +9,7 @@ import {
   createTenantWithOwnerViaApi,
   loginOrThrow,
   nextMobileNumber,
+  stockViaPurchase,
 } from './helpers/factories';
 
 const app = createApp();
@@ -27,7 +28,7 @@ async function setupTenantOwner() {
 }
 
 describe('POST /api/v1/inventory/opening-stock', () => {
-  it('creates inventory and an OPENING_STOCK ledger entry with correct previous/resulting stock', async () => {
+  it('no longer exists — stock only enters inventory through purchases', async () => {
     const { owner } = await setupTenantOwner();
     const product = await createProductViaApi(app, owner.accessToken);
 
@@ -36,103 +37,7 @@ describe('POST /api/v1/inventory/opening-stock', () => {
       .set('Authorization', `Bearer ${owner.accessToken}`)
       .send({ productId: product._id, quantity: 500 });
 
-    expect(res.status).toBe(201);
-    expect(res.body.data.inventory.currentStock).toBe(500);
-    expect(res.body.data.transaction.type).toBe('OPENING_STOCK');
-    expect(res.body.data.transaction.previousStock).toBe(0);
-    expect(res.body.data.transaction.resultingStock).toBe(500);
-
-    const inventoryRes = await request(app)
-      .get(`/api/v1/inventory/${product._id}`)
-      .set('Authorization', `Bearer ${owner.accessToken}`);
-    expect(inventoryRes.status).toBe(200);
-    expect(inventoryRes.body.data.currentStock).toBe(500);
-    expect(inventoryRes.body.data.status).toBe('IN_STOCK');
-  });
-
-  it('rejects setting opening stock twice for the same product', async () => {
-    const { owner } = await setupTenantOwner();
-    const product = await createProductViaApi(app, owner.accessToken);
-
-    await request(app)
-      .post('/api/v1/inventory/opening-stock')
-      .set('Authorization', `Bearer ${owner.accessToken}`)
-      .send({ productId: product._id, quantity: 500 })
-      .expect(201);
-
-    const res = await request(app)
-      .post('/api/v1/inventory/opening-stock')
-      .set('Authorization', `Bearer ${owner.accessToken}`)
-      .send({ productId: product._id, quantity: 100 });
-
-    expect(res.status).toBe(409);
-
-    // Confirm the second attempt left the first value untouched (no partial double-apply).
-    const inventoryRes = await request(app)
-      .get(`/api/v1/inventory/${product._id}`)
-      .set('Authorization', `Bearer ${owner.accessToken}`);
-    expect(inventoryRes.body.data.currentStock).toBe(500);
-  });
-
-  it('rejects zero or negative opening stock quantity', async () => {
-    const { owner } = await setupTenantOwner();
-    const product = await createProductViaApi(app, owner.accessToken);
-
-    const zeroRes = await request(app)
-      .post('/api/v1/inventory/opening-stock')
-      .set('Authorization', `Bearer ${owner.accessToken}`)
-      .send({ productId: product._id, quantity: 0 });
-    expect(zeroRes.status).toBe(400);
-
-    const negativeRes = await request(app)
-      .post('/api/v1/inventory/opening-stock')
-      .set('Authorization', `Bearer ${owner.accessToken}`)
-      .send({ productId: product._id, quantity: -5 });
-    expect(negativeRes.status).toBe(400);
-  });
-
-  it('rejects an unknown/invalid product id', async () => {
-    const { owner } = await setupTenantOwner();
-
-    const res = await request(app)
-      .post('/api/v1/inventory/opening-stock')
-      .set('Authorization', `Bearer ${owner.accessToken}`)
-      .send({ productId: '65f000000000000000000000', quantity: 100 });
-
     expect(res.status).toBe(404);
-  });
-
-  it('a Sales Person cannot set opening stock (403, not 401)', async () => {
-    // Sales Person is excluded from opening-stock writes — creating
-    // business users requires SUPER_ADMIN (POST /api/v1/users), not the
-    // tenant owner, so a fresh Super Admin session is needed here.
-    const superAdminMobile = nextMobileNumber();
-    await createSuperAdminDirect(superAdminMobile, 'SuperSecret123');
-    const superAdmin = await loginOrThrow(app, superAdminMobile, 'SuperSecret123');
-    const tenant = await createTenantWithOwnerViaApi(app, superAdmin.accessToken);
-    const owner = await loginOrThrow(app, tenant.ownerMobileNumber, tenant.ownerPassword);
-    const product = await createProductViaApi(app, owner.accessToken);
-
-    const salesMobile = nextMobileNumber();
-    await request(app)
-      .post('/api/v1/users')
-      .set('Authorization', `Bearer ${superAdmin.accessToken}`)
-      .send({
-        tenantId: tenant.tenantId,
-        name: 'Sales Person',
-        mobileNumber: salesMobile,
-        password: 'SalesPass123',
-        role: 'SALES_PERSON',
-      })
-      .expect(201);
-    const salesPerson = await loginOrThrow(app, salesMobile, 'SalesPass123');
-
-    const res = await request(app)
-      .post('/api/v1/inventory/opening-stock')
-      .set('Authorization', `Bearer ${salesPerson.accessToken}`)
-      .send({ productId: product._id, quantity: 100 });
-
-    expect(res.status).toBe(403);
   });
 });
 
@@ -163,14 +68,8 @@ describe('GET /api/v1/inventory', () => {
       lowStockThreshold: 50,
     });
 
-    await request(app)
-      .post('/api/v1/inventory/opening-stock')
-      .set('Authorization', `Bearer ${owner.accessToken}`)
-      .send({ productId: lowProduct._id, quantity: 20 });
-    await request(app)
-      .post('/api/v1/inventory/opening-stock')
-      .set('Authorization', `Bearer ${owner.accessToken}`)
-      .send({ productId: healthyProduct._id, quantity: 200 });
+    await stockViaPurchase(app, owner.accessToken, lowProduct._id, 20);
+    await stockViaPurchase(app, owner.accessToken, healthyProduct._id, 200);
 
     const res = await request(app)
       .get('/api/v1/inventory')
@@ -192,6 +91,26 @@ describe('GET /api/v1/inventory', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.data.every((r: { status: string }) => r.status === 'OUT_OF_STOCK')).toBe(true);
+  });
+
+  it('inStock=true returns only products with stock on hand, low stock included', async () => {
+    const { owner } = await setupTenantOwner();
+    const low = await createProductViaApi(app, owner.accessToken, {
+      name: 'Low Sellable',
+      lowStockThreshold: 50,
+    });
+    const healthy = await createProductViaApi(app, owner.accessToken, { name: 'Healthy Sellable' });
+    await createProductViaApi(app, owner.accessToken, { name: 'Never Purchased' });
+    await stockViaPurchase(app, owner.accessToken, low._id, 10);
+    await stockViaPurchase(app, owner.accessToken, healthy._id, 200);
+
+    const res = await request(app)
+      .get('/api/v1/inventory?inStock=true')
+      .set('Authorization', `Bearer ${owner.accessToken}`);
+
+    expect(res.status).toBe(200);
+    const names = res.body.data.map((r: { name: string }) => r.name).sort();
+    expect(names).toEqual(['Healthy Sellable', 'Low Sellable']);
   });
 
   it('searches by product name', async () => {
@@ -254,10 +173,7 @@ describe('POST /api/v1/purchases', () => {
     const product = await createProductViaApi(app, owner.accessToken);
     const supplier = await createSupplierViaApi(app, owner.accessToken);
 
-    await request(app)
-      .post('/api/v1/inventory/opening-stock')
-      .set('Authorization', `Bearer ${owner.accessToken}`)
-      .send({ productId: product._id, quantity: 500 });
+    await stockViaPurchase(app, owner.accessToken, product._id, 500);
 
     const res = await request(app)
       .post('/api/v1/purchases')

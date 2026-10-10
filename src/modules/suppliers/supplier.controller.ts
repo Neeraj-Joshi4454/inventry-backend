@@ -65,14 +65,16 @@ export const setSupplierStatusHandler = asyncHandler(async (req: Request, res: R
   sendSuccess(res, 200, 'Supplier status updated successfully', supplier);
 });
 
-export const getSupplierPurchaseHistoryHandler = asyncHandler(async (req: Request, res: Response) => {
-  const query = req.query as unknown as SupplierPurchaseHistoryQuery;
-  const pagination = getPaginationParams(query);
-  const result = await getSupplierPurchaseHistory(
-    req.user!.tenantId!,
-    req.params.id as string,
-    query,
-    pagination
-  );
-  sendSuccess(res, 200, 'Supplier purchase history fetched successfully', result);
-});
+export const getSupplierPurchaseHistoryHandler = asyncHandler(
+  async (req: Request, res: Response) => {
+    const query = req.query as unknown as SupplierPurchaseHistoryQuery;
+    const pagination = getPaginationParams(query);
+    const result = await getSupplierPurchaseHistory(
+      req.user!.tenantId!,
+      req.params.id as string,
+      query,
+      pagination
+    );
+    sendSuccess(res, 200, 'Supplier purchase history fetched successfully', result);
+  }
+);

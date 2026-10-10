@@ -9,7 +9,10 @@ import { runInTransaction } from '../../utils/withTransaction';
 import { buildPaginationMeta, type PaginationParams } from '../../utils/pagination';
 import { recordAuditLog } from '../auditLogs/auditLog.service';
 import type { UserRole } from '../../types/enums';
-import type { ListCustomerPaymentsQuery, RecordCustomerPaymentInput } from './customerPayment.validators';
+import type {
+  ListCustomerPaymentsQuery,
+  RecordCustomerPaymentInput,
+} from './customerPayment.validators';
 
 /**
  * Atomically records a payment against one sale and keeps the sale's
@@ -56,6 +59,7 @@ export async function recordCustomerPayment(params: {
           amount: input.amount,
           method: input.method,
           paymentDate: input.paymentDate ?? new Date(),
+          referenceNumber: input.referenceNumber || undefined,
           notes: input.notes,
           recordedBy: userId,
         },

@@ -7,6 +7,7 @@ export const recordCustomerPaymentSchema = z.object({
   amount: z.number().positive('Payment amount must be greater than zero'),
   method: z.enum(Object.values(PaymentMethod) as [string, ...string[]]),
   paymentDate: z.coerce.date().optional(),
+  referenceNumber: z.string().trim().max(100).optional(),
   notes: z.string().optional(),
 });
 

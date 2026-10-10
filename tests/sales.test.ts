@@ -9,6 +9,7 @@ import {
   createTenantWithOwnerViaApi,
   loginOrThrow,
   nextMobileNumber,
+  stockViaPurchase,
 } from './helpers/factories';
 
 const app = createApp();
@@ -27,11 +28,7 @@ async function setupTenantOwner() {
 }
 
 async function stockProduct(owner: { accessToken: string }, productId: string, quantity: number) {
-  await request(app)
-    .post('/api/v1/inventory/opening-stock')
-    .set('Authorization', `Bearer ${owner.accessToken}`)
-    .send({ productId, quantity })
-    .expect(201);
+  await stockViaPurchase(app, owner.accessToken, productId, quantity);
 }
 
 describe('POST /api/v1/sales', () => {
@@ -415,7 +412,9 @@ describe('tenant isolation for sales/customers', () => {
     const ownerA = await loginOrThrow(app, tenantA.ownerMobileNumber, tenantA.ownerPassword);
     const ownerB = await loginOrThrow(app, tenantB.ownerMobileNumber, tenantB.ownerPassword);
 
-    const productB = await createProductViaApi(app, ownerB.accessToken, { name: 'Tenant B Product' });
+    const productB = await createProductViaApi(app, ownerB.accessToken, {
+      name: 'Tenant B Product',
+    });
     const customerB = await createCustomerViaApi(app, ownerB.accessToken, 'Tenant B Customer');
     await stockProduct(ownerB, productB._id, 100);
     await request(app)

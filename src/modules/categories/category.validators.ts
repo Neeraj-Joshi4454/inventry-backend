@@ -5,4 +5,8 @@ export const createCategorySchema = z.object({
   description: z.string().optional(),
 });
 
+export const categoryIdParamSchema = z.object({
+  id: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid category id'),
+});
+
 export type CreateCategoryInput = z.infer<typeof createCategorySchema>;
