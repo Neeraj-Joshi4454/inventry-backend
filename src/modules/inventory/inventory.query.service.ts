@@ -21,7 +21,7 @@ function computeStatus(currentStock: number, lowStockThreshold: number): string 
   return 'IN_STOCK';
 }
 
-const STOCK_STATUS_MATCH_STAGE = {
+export const STOCK_STATUS_MATCH_STAGE = {
   $addFields: {
     currentStock: { $ifNull: ['$inventory.currentStock', 0] },
     status: {
