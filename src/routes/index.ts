@@ -21,6 +21,7 @@ import notificationRoutes from '../modules/notifications/notification.routes';
 import exportRoutes from '../modules/exports/export.routes';
 import businessSettingsRoutes from '../modules/businessSettings/businessSettings.routes';
 import adminRoutes from '../modules/admin/admin.routes';
+import registrationRoutes from '../modules/registrations/registration.routes';
 
 /** Single aggregation point for every /api/v1/* route. */
 const router = Router();
@@ -47,5 +48,6 @@ router.use('/notifications', notificationRoutes);
 router.use('/exports', exportRoutes);
 router.use('/business-settings', businessSettingsRoutes);
 router.use('/admin', adminRoutes);
+router.use('/registrations', registrationRoutes);
 
 export default router;

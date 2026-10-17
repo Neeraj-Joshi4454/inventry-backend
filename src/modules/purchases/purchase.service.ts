@@ -10,6 +10,7 @@ import { calculateDocumentTax, resolveTaxSplit } from '../taxes/taxCalculation.s
 import { InventoryTransactionType, PaymentStatus, ReferenceType } from '../../types/enums';
 import { AuditAction } from '../../constants/auditActions';
 import { BadRequestError, NotFoundError } from '../../utils/errors';
+import { MONEY_EPSILON, roundMoney } from '../../utils/money';
 import { escapeRegex } from '../../utils/queryFilters';
 import { runInTransaction } from '../../utils/withTransaction';
 import { buildPaginationMeta, type PaginationParams } from '../../utils/pagination';
@@ -87,6 +88,18 @@ export async function createPurchase(params: {
       taxSplit
     );
 
+    const paidAmount = roundMoney(input.paidAmount ?? 0);
+    if (paidAmount > taxResult.totalAmount + MONEY_EPSILON) {
+      throw new BadRequestError('Paid amount cannot exceed the purchase total');
+    }
+    const dueAmount = roundMoney(Math.max(taxResult.totalAmount - paidAmount, 0));
+    const paymentStatus =
+      paidAmount <= MONEY_EPSILON
+        ? PaymentStatus.UNPAID
+        : dueAmount <= MONEY_EPSILON
+          ? PaymentStatus.PAID
+          : PaymentStatus.PARTIAL;
+
     const purchaseNumber = await nextPurchaseNumber(tenantId);
 
     const [purchase] = await Purchase.create(
@@ -106,9 +119,11 @@ export async function createPurchase(params: {
           taxAmount: taxResult.taxAmount,
           taxType: taxResult.taxType,
           totalAmount: taxResult.totalAmount,
-          paidAmount: 0,
-          dueAmount: taxResult.totalAmount,
-          paymentStatus: PaymentStatus.UNPAID,
+          paidAmount,
+          dueAmount,
+          paymentStatus,
+          paymentMethod: input.paymentMethod,
+          paymentReference: paidAmount > 0 ? input.paymentReference || undefined : undefined,
           notes: input.notes,
           createdBy: userId,
         },

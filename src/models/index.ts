@@ -13,3 +13,4 @@ export * from './sale.model';
 export * from './stockAdjustment.model';
 export * from './notification.model';
 export * from './auditLog.model';
+export * from './registrationRequest.model';

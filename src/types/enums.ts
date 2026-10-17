@@ -131,3 +131,13 @@ export type TaxType = (typeof TaxType)[keyof typeof TaxType];
 // this list (real invoices occasionally need an odd rate), only the
 // tenant's defaultTaxRate and a product's own configured taxRate are.
 export const GST_RATES = [0, 5, 12, 18, 28] as const;
+
+// Lifecycle of a self-service business registration (see
+// registrationRequest.model.ts): submitted from the app's Register screen,
+// then approved (business + owner created) or rejected by a Super Admin.
+export const RegistrationStatus = {
+  PENDING: 'PENDING',
+  APPROVED: 'APPROVED',
+  REJECTED: 'REJECTED',
+} as const;
+export type RegistrationStatus = (typeof RegistrationStatus)[keyof typeof RegistrationStatus];

@@ -9,6 +9,7 @@ import { signAccessToken, toIdString } from '../../utils/jwt';
 import { recordAuditLog } from '../auditLogs/auditLog.service';
 import * as sessionService from './refreshToken.service';
 import type { SessionMeta } from './refreshToken.service';
+import { registrationStatusMessage } from '../registrations/registration.service';
 
 const GENERIC_LOGIN_ERROR = 'Invalid mobile number or password';
 
@@ -36,6 +37,13 @@ async function issueAccessToken(user: {
  */
 export async function login(mobileNumber: string, password: string, meta: SessionMeta = {}) {
   const user = await User.findOne({ mobileNumber }).select('+passwordHash');
+
+  if (!user) {
+    // No account yet — maybe a self-service registration still under
+    // review (or rejected); say so instead of "invalid credentials".
+    const registrationMessage = await registrationStatusMessage(mobileNumber, password);
+    if (registrationMessage) throw new ForbiddenError(registrationMessage);
+  }
 
   if (!user || !(await verifyPassword(user.passwordHash, password))) {
     if (user) {

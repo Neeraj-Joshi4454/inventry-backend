@@ -19,7 +19,7 @@ import { buildPaginationMeta, type PaginationParams } from '../../utils/paginati
 import { buildSearchFilter, buildSortOption } from '../../utils/queryFilters';
 import { recordAuditLog } from '../auditLogs/auditLog.service';
 import type { CreateTenantInput, ListTenantsQuery, UpdateTenantInput } from './tenant.validators';
-import type { FilterQuery } from 'mongoose';
+import type { ClientSession, FilterQuery } from 'mongoose';
 import type { TenantDocument } from '../../models/tenant.model';
 
 export interface CreateTenantActor {
@@ -41,92 +41,127 @@ export interface CreateTenantActor {
  * didn't actually end up committed.
  */
 export async function createTenantWithOwner(actor: CreateTenantActor, input: CreateTenantInput) {
-  const { superAdminId } = actor;
-  return runInTransaction(async (session) => {
-    const existing = await User.findOne({ mobileNumber: input.adminUser.mobileNumber }).session(
-      session
-    );
-    if (existing) {
-      throw new ConflictError('This mobile number is already registered to an account');
-    }
-
-    const [tenant] = await Tenant.create(
-      [
-        {
-          businessName: input.businessName,
-          ownerName: input.ownerName,
-          mobileNumber: input.businessMobileNumber,
-          email: input.email,
-          gstNumber: input.gstNumber,
-          address: input.address,
-          status: AccountStatus.ACTIVE,
-          createdBy: superAdminId,
-        },
-      ],
-      { session }
-    );
-
-    const passwordHash = await hashPassword(input.adminUser.password);
-
-    const [adminUser] = await User.create(
-      [
-        {
-          tenantId: tenant._id,
-          name: input.adminUser.name,
-          mobileNumber: input.adminUser.mobileNumber,
-          passwordHash,
-          role: UserRole.OWNER,
-          status: AccountStatus.ACTIVE,
-          mustChangePassword: true,
-          createdBy: superAdminId,
-        },
-      ],
-      { session }
-    );
-
-    await Category.insertMany(
-      DEFAULT_CATEGORIES.map((c) => ({ ...c, tenantId: tenant._id })),
-      { session }
-    );
-    await Unit.insertMany(
-      DEFAULT_UNITS.map((u) => ({ ...u, tenantId: tenant._id })),
-      { session }
-    );
-    await ExpenseCategory.insertMany(
-      DEFAULT_EXPENSE_CATEGORIES.map((c) => ({ ...c, tenantId: tenant._id, isSystem: true })),
-      { session }
-    );
-    // GST stays enabled by default (see tax.service.ts's DEFAULT_TAX_CONFIG
-    // comment for why) — pre-filling state/gstin here is just a
-    // convenience if they were already entered on the business profile.
-    await TaxConfig.create(
-      [
-        {
-          tenantId: tenant._id,
-          gstEnabled: true,
-          gstin: input.gstNumber,
-          state: input.address?.state,
-        },
-      ],
-      { session }
-    );
-
-    await recordAuditLog({
-      tenantId: tenant._id as Types.ObjectId,
-      actorId: superAdminId,
-      actorRole: UserRole.SUPER_ADMIN,
-      action: AuditAction.TENANT_CREATED,
-      entityType: 'Tenant',
-      entityId: tenant._id as Types.ObjectId,
-      changes: {
-        after: { businessName: tenant.businessName, ownerMobile: adminUser.mobileNumber },
+  // Hashed once, outside the transaction, so a transient-error retry
+  // doesn't redo the (deliberately slow) hash.
+  const passwordHash = await hashPassword(input.adminUser.password);
+  return runInTransaction((session) =>
+    createTenantWithOwnerInSession(session, actor, {
+      ...input,
+      adminUser: {
+        name: input.adminUser.name,
+        mobileNumber: input.adminUser.mobileNumber,
+        passwordHash,
+        // The Super Admin chose this password, so the owner must replace it.
+        mustChangePassword: true,
       },
-      ipAddress: actor.ipAddress,
-      session,
-    });
+    })
+  );
+}
 
-    return { tenant, adminUser };
+/** What createTenantWithOwnerInSession needs: the password already hashed. */
+export type TenantWithOwnerData = Omit<CreateTenantInput, 'adminUser'> & {
+  adminUser: {
+    name: string;
+    mobileNumber: string;
+    passwordHash: string;
+    mustChangePassword: boolean;
+  };
+};
+
+/**
+ * The body of createTenantWithOwner, run inside the caller's transaction —
+ * also used when approving a self-service registration request
+ * (registration.service.ts), so the business is created and the request
+ * marked approved atomically.
+ */
+export async function createTenantWithOwnerInSession(
+  session: ClientSession,
+  actor: CreateTenantActor,
+  input: TenantWithOwnerData
+) {
+  const { superAdminId } = actor;
+  const existing = await User.findOne({ mobileNumber: input.adminUser.mobileNumber }).session(
+    session
+  );
+  if (existing) {
+    throw new ConflictError('This mobile number is already registered to an account');
+  }
+
+  const [tenant] = await Tenant.create(
+    [
+      {
+        businessName: input.businessName,
+        ownerName: input.ownerName,
+        mobileNumber: input.businessMobileNumber,
+        email: input.email,
+        gstNumber: input.gstNumber,
+        address: input.address,
+        status: AccountStatus.ACTIVE,
+        createdBy: superAdminId,
+      },
+    ],
+    { session }
+  );
+
+  const [adminUser] = await User.create(
+    [
+      {
+        tenantId: tenant._id,
+        name: input.adminUser.name,
+        mobileNumber: input.adminUser.mobileNumber,
+        passwordHash: input.adminUser.passwordHash,
+        role: UserRole.OWNER,
+        status: AccountStatus.ACTIVE,
+        mustChangePassword: input.adminUser.mustChangePassword,
+        createdBy: superAdminId,
+      },
+    ],
+    { session }
+  );
+
+  await Category.insertMany(
+    DEFAULT_CATEGORIES.map((c) => ({ ...c, tenantId: tenant._id })),
+    { session }
+  );
+  await Unit.insertMany(
+    DEFAULT_UNITS.map((u) => ({ ...u, tenantId: tenant._id })),
+    { session }
+  );
+  await ExpenseCategory.insertMany(
+    DEFAULT_EXPENSE_CATEGORIES.map((c) => ({ ...c, tenantId: tenant._id, isSystem: true })),
+    { session }
+  );
+  // GST stays enabled by default (see tax.service.ts's DEFAULT_TAX_CONFIG
+  // comment for why) — pre-filling state/gstin here is just a
+  // convenience if they were already entered on the business profile.
+  await TaxConfig.create(
+    [
+      {
+        tenantId: tenant._id,
+        gstEnabled: true,
+        gstin: input.gstNumber,
+        state: input.address?.state,
+      },
+    ],
+    { session }
+  );
+
+  await recordAuditLog({
+    tenantId: tenant._id as Types.ObjectId,
+    actorId: superAdminId,
+    actorRole: UserRole.SUPER_ADMIN,
+    action: AuditAction.TENANT_CREATED,
+    entityType: 'Tenant',
+    entityId: tenant._id as Types.ObjectId,
+    changes: {
+      after: { businessName: tenant.businessName, ownerMobile: adminUser.mobileNumber },
+    },
+    ipAddress: actor.ipAddress,
+    session,
   });
+
+  return { tenant, adminUser };
+  return { tenant, adminUser };
 }
 
 const TENANT_SORT_FIELDS = ['businessName', 'createdAt', 'status'] as const;

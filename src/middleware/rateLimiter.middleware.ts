@@ -49,3 +49,13 @@ export const loginRateLimiter = rateLimit({
     return `${req.ip ?? 'unknown-ip'}:${mobile}`;
   },
 });
+
+// Public self-service registration — per IP, so one device can't flood the
+// admin's review queue. Overridable for tests, like AUTH_RATE_LIMIT_MAX.
+export const registrationRateLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: Number(process.env.REGISTRATION_RATE_LIMIT_MAX ?? 5),
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: TOO_MANY_ATTEMPTS,
+});

@@ -1,5 +1,5 @@
 import { Schema, model, type InferSchemaType, type Types } from 'mongoose';
-import { DocumentStatus, PaymentStatus, TaxType } from '../types/enums';
+import { DocumentStatus, PaymentMethod, PaymentStatus, TaxType } from '../types/enums';
 import { applyDecimalToJson } from '../utils/schemaJson';
 
 const purchaseSchema = new Schema(
@@ -36,6 +36,10 @@ const purchaseSchema = new Schema(
       enum: Object.values(PaymentStatus),
       default: PaymentStatus.UNPAID,
     },
+    // How the amount paid at purchase time was paid (CREDIT when nothing
+    // was paid), plus its transaction reference — mirrors Sale.
+    paymentMethod: { type: String, enum: Object.values(PaymentMethod) },
+    paymentReference: { type: String, trim: true },
     notes: { type: String, trim: true },
     createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
   },

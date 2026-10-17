@@ -19,3 +19,4 @@ process.env.CORS_ORIGIN ??= 'http://localhost:3000';
 // means to exercise it.
 process.env.AUTH_RATE_LIMIT_MAX ??= '100000';
 process.env.GLOBAL_RATE_LIMIT_MAX ??= '100000';
+process.env.REGISTRATION_RATE_LIMIT_MAX ??= '100000';
