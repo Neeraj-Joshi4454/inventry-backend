@@ -77,3 +77,64 @@ describe('POST /api/v1/purchases payment', () => {
     expect(credit.status).toBe(400);
   });
 });
+
+describe('POST /api/v1/supplier-payments', () => {
+  function pay(ctx: Awaited<ReturnType<typeof setup>>, body: Record<string, unknown>) {
+    return request(app)
+      .post('/api/v1/supplier-payments')
+      .set('Authorization', `Bearer ${ctx.token}`)
+      .send(body);
+  }
+
+  function detail(ctx: Awaited<ReturnType<typeof setup>>, purchaseId: string) {
+    return request(app)
+      .get(`/api/v1/purchases/${purchaseId}`)
+      .set('Authorization', `Bearer ${ctx.token}`);
+  }
+
+  it('settles a credit purchase in instalments and keeps the history', async () => {
+    const ctx = await setup();
+    const created = await purchase(ctx, { paidAmount: 300, paymentMethod: 'BANK_TRANSFER' });
+    const purchaseId = created.body.data._id as string;
+
+    const first = await pay(ctx, { purchaseId, amount: 200, method: 'UPI', referenceNumber: 'U1' });
+    expect(first.status).toBe(201);
+    expect(first.body.data).toMatchObject({ amount: 200, method: 'UPI', referenceNumber: 'U1' });
+
+    let res = await detail(ctx, purchaseId);
+    expect(res.body.data.purchase).toMatchObject({
+      paidAmount: 500,
+      dueAmount: 500,
+      paymentStatus: 'PARTIAL',
+    });
+
+    expect((await pay(ctx, { purchaseId, amount: 500, method: 'CASH' })).status).toBe(201);
+    res = await detail(ctx, purchaseId);
+    expect(res.body.data.purchase).toMatchObject({
+      paidAmount: 1000,
+      dueAmount: 0,
+      paymentStatus: 'PAID',
+    });
+    // Initial advance + two later payments.
+    expect(res.body.data.payments).toHaveLength(3);
+    expect(
+      res.body.data.payments.reduce((sum: number, p: { amount: number }) => sum + p.amount, 0)
+    ).toBe(1000);
+  });
+
+  it('rejects overpaying, paying a settled purchase, or paying by credit', async () => {
+    const ctx = await setup();
+    const unpaid = await purchase(ctx);
+    const unpaidId = unpaid.body.data._id as string;
+    expect((await pay(ctx, { purchaseId: unpaidId, amount: 1500, method: 'CASH' })).status).toBe(
+      400
+    );
+    expect((await pay(ctx, { purchaseId: unpaidId, amount: 100, method: 'CREDIT' })).status).toBe(
+      400
+    );
+
+    const paid = await purchase(ctx, { paidAmount: 1000, paymentMethod: 'CASH' });
+    const paidId = paid.body.data._id as string;
+    expect((await pay(ctx, { purchaseId: paidId, amount: 1, method: 'CASH' })).status).toBe(400);
+  });
+});

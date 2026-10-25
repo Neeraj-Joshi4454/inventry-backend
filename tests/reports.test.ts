@@ -394,6 +394,75 @@ describe('GET /api/v1/reports/profit', () => {
     expect(res.body.data.grossMarginPercent).toBeCloseTo((12000 / 42000) * 100, 2);
   });
 
+  it('deducts what the sold units actually cost to purchase (100 bricks: bought ₹10, sold ₹15)', async () => {
+    const { owner } = await setupTenantOwner();
+    const customer = await createCustomerViaApi(app, owner.accessToken);
+    const supplier = await createSupplierViaApi(app, owner.accessToken);
+    // purchasePrice left at its ₹0 default — the cost must come from the purchase.
+    const product = await createProductViaApi(app, owner.accessToken, { name: 'Brick' });
+
+    await request(app)
+      .post('/api/v1/purchases')
+      .set('Authorization', `Bearer ${owner.accessToken}`)
+      .send({
+        supplierId: supplier._id,
+        items: [{ productId: product._id, quantity: 100, unitPrice: 10, taxRate: 0 }],
+      })
+      .expect(201);
+    await request(app)
+      .post('/api/v1/sales')
+      .set('Authorization', `Bearer ${owner.accessToken}`)
+      .send({
+        customerId: customer._id,
+        items: [{ productId: product._id, quantity: 100, unitPrice: 15, taxRate: 0 }],
+      })
+      .expect(201);
+
+    const res = await request(app)
+      .get('/api/v1/reports/profit')
+      .set('Authorization', `Bearer ${owner.accessToken}`);
+
+    expect(res.body.data).toMatchObject({
+      salesRevenue: 1500,
+      costOfGoodsSold: 1000,
+      grossProfit: 500,
+      netProfit: 500,
+    });
+  });
+
+  it('uses the weighted-average purchase cost when a product was bought at different prices', async () => {
+    const { owner } = await setupTenantOwner();
+    const customer = await createCustomerViaApi(app, owner.accessToken);
+    const supplier = await createSupplierViaApi(app, owner.accessToken);
+    const product = await createProductViaApi(app, owner.accessToken);
+
+    for (const unitPrice of [10, 14]) {
+      await request(app)
+        .post('/api/v1/purchases')
+        .set('Authorization', `Bearer ${owner.accessToken}`)
+        .send({
+          supplierId: supplier._id,
+          items: [{ productId: product._id, quantity: 100, unitPrice, taxRate: 0 }],
+        })
+        .expect(201);
+    }
+    await request(app)
+      .post('/api/v1/sales')
+      .set('Authorization', `Bearer ${owner.accessToken}`)
+      .send({
+        customerId: customer._id,
+        items: [{ productId: product._id, quantity: 50, unitPrice: 20, taxRate: 0 }],
+      })
+      .expect(201);
+
+    const res = await request(app)
+      .get('/api/v1/reports/profit')
+      .set('Authorization', `Bearer ${owner.accessToken}`);
+
+    expect(res.body.data.costOfGoodsSold).toBe(600); // 50 × avg ₹12
+    expect(res.body.data.grossProfit).toBe(400);
+  });
+
   it('returns zeros (not NaN/Infinity) when there is no sales revenue', async () => {
     const { owner } = await setupTenantOwner();
     const res = await request(app)

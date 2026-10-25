@@ -4,10 +4,16 @@ import { Product } from '../../models/product.model';
 import { Supplier } from '../../models/party.model';
 import { InventoryTransaction } from '../../models/inventoryTransaction.model';
 import { Tenant } from '../../models/tenant.model';
+import { SupplierPayment } from '../../models/supplierPayment.model';
 import { applyStockChange } from '../inventory/inventory.service';
 import { getEffectiveTaxConfig } from '../taxes/tax.service';
 import { calculateDocumentTax, resolveTaxSplit } from '../taxes/taxCalculation.service';
-import { InventoryTransactionType, PaymentStatus, ReferenceType } from '../../types/enums';
+import {
+  InventoryTransactionType,
+  PaymentMethod,
+  PaymentStatus,
+  ReferenceType,
+} from '../../types/enums';
 import { AuditAction } from '../../constants/auditActions';
 import { BadRequestError, NotFoundError } from '../../utils/errors';
 import { MONEY_EPSILON, roundMoney } from '../../utils/money';
@@ -169,6 +175,28 @@ export async function createPurchase(params: {
       });
     }
 
+    // Any amount paid up front goes into the same ledger later "add payment"
+    // calls write to (see supplierPayment.service.ts), so the purchase's
+    // payment history is complete — mirrors sale.service.ts::createSale.
+    if (paidAmount > 0) {
+      await SupplierPayment.create(
+        [
+          {
+            tenantId,
+            supplierId: supplier._id,
+            purchaseId: purchase._id,
+            amount: paidAmount,
+            method: input.paymentMethod ?? PaymentMethod.CASH,
+            paymentDate: input.purchaseDate ?? new Date(),
+            referenceNumber: input.paymentReference || undefined,
+            notes: 'Initial payment at purchase',
+            recordedBy: userId,
+          },
+        ],
+        { session }
+      );
+    }
+
     await recordAuditLog({
       tenantId,
       actorId: userId,
@@ -261,7 +289,11 @@ export async function getPurchaseById(tenantId: Types.ObjectId, purchaseId: stri
     };
   });
 
-  return { purchase, items: itemsWithImpact };
+  const payments = await SupplierPayment.find({ tenantId, purchaseId: purchase._id })
+    .sort({ paymentDate: -1 })
+    .populate('recordedBy', 'name');
+
+  return { purchase, items: itemsWithImpact, payments };
 }
 
 /**

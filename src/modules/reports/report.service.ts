@@ -2,7 +2,7 @@ import { Types, type Model, type PipelineStage } from 'mongoose';
 import { Product } from '../../models/product.model';
 import { InventoryTransaction } from '../../models/inventoryTransaction.model';
 import { Sale, SaleItem } from '../../models/sale.model';
-import { Purchase } from '../../models/purchase.model';
+import { Purchase, PurchaseItem } from '../../models/purchase.model';
 import { SaleReturn } from '../../models/saleReturn.model';
 import { PurchaseReturn } from '../../models/purchaseReturn.model';
 import { Expense } from '../../models/expense.model';
@@ -13,6 +13,7 @@ import {
   STOCK_INCREASING_TYPES,
 } from '../../types/enums';
 import { convertDecimals } from '../../utils/schemaJson';
+import { roundMoney } from '../../utils/money';
 import { escapeRegex } from '../../utils/queryFilters';
 import { dayBounds, monthBounds } from '../../utils/dateRanges';
 import { buildPaginationMeta, type PaginationParams } from '../../utils/pagination';
@@ -664,14 +665,17 @@ export async function getInventoryLedgerReport(
 // ---------------------------------------------------------------------------
 
 /**
- * COGS is computed against each product's *current* purchasePrice, not a
- * historical per-lot cost — this system doesn't do lot/FIFO costing (see
- * product.model.ts: one purchasePrice per product, not per purchase). This
- * is a documented simplification: if a product's cost has changed since a
- * given sale, this report uses today's cost for that sale's units, not
- * what was actually paid at the time. Good enough for a v1 gross-margin
- * estimate; a real FIFO/weighted-average costing engine is a separate,
- * larger feature.
+ * Profit = what was sold minus what those units cost to buy, minus
+ * operating expenses — all exclusive of GST, since GST collected on sales
+ * is owed to the government and GST paid on purchases is claimable input
+ * credit; neither is the business's own revenue or cost.
+ *
+ * COGS = quantity sold x the product's weighted-average purchase cost,
+ * taken from every actual Purchase line for that product (taxable value /
+ * quantity). This system doesn't do lot/FIFO costing, so an average over
+ * all purchases is the cost basis. A product with no costed purchase (never
+ * bought, or only stocked via ₹0 purchases) falls back to its configured
+ * purchasePrice.
  */
 export async function getProfitSummary(
   tenantId: Types.ObjectId,
@@ -687,26 +691,22 @@ export async function getProfitSummary(
   const expenseMatch: Record<string, unknown> = { tenantId, status: ExpenseStatus.ACTIVE };
   if (saleDateRange) expenseMatch.expenseDate = saleDateRange;
 
-  const [revenueAgg, cogsAgg, expenseAgg] = await Promise.all([
+  const [revenueAgg, soldAgg, expenseAgg] = await Promise.all([
     Sale.aggregate([
       { $match: saleMatch },
-      { $group: { _id: null, salesRevenue: { $sum: '$totalAmount' } } },
+      {
+        $group: {
+          _id: null,
+          salesRevenue: { $sum: { $subtract: ['$totalAmount', '$taxAmount'] } },
+        },
+      },
     ]),
     SaleItem.aggregate([
       { $match: { tenantId } },
       { $lookup: { from: 'sales', localField: 'saleId', foreignField: '_id', as: 'sale' } },
       { $unwind: '$sale' },
       { $match: saleDateRange ? { 'sale.saleDate': saleDateRange } : {} },
-      {
-        $lookup: { from: 'products', localField: 'productId', foreignField: '_id', as: 'product' },
-      },
-      { $unwind: '$product' },
-      {
-        $group: {
-          _id: null,
-          costOfGoodsSold: { $sum: { $multiply: ['$quantity', '$product.purchasePrice'] } },
-        },
-      },
+      { $group: { _id: '$productId', quantitySold: { $sum: '$quantity' } } },
     ]),
     Expense.aggregate([
       { $match: expenseMatch },
@@ -714,12 +714,54 @@ export async function getProfitSummary(
     ]),
   ]);
 
+  const soldProductIds = soldAgg.map((row: { _id: Types.ObjectId }) => row._id);
+  const [purchaseCostAgg, products] = await Promise.all([
+    PurchaseItem.aggregate([
+      { $match: { tenantId, productId: { $in: soldProductIds } } },
+      {
+        $group: {
+          _id: '$productId',
+          quantityPurchased: { $sum: '$quantity' },
+          // Taxable (pre-GST) value of the line.
+          purchaseCost: {
+            $sum: {
+              $subtract: ['$lineTotal', { $add: ['$cgstAmount', '$sgstAmount', '$igstAmount'] }],
+            },
+          },
+        },
+      },
+    ]),
+    Product.find({ tenantId, _id: { $in: soldProductIds } }).select('purchasePrice'),
+  ]);
+
+  const averageCostByProduct = new Map<string, number>();
+  for (const row of clean(purchaseCostAgg) as Array<{
+    _id: Types.ObjectId;
+    quantityPurchased: number;
+    purchaseCost: unknown;
+  }>) {
+    const cost = toNumber(row.purchaseCost);
+    if (row.quantityPurchased > 0 && cost > 0) {
+      averageCostByProduct.set(row._id.toString(), cost / row.quantityPurchased);
+    }
+  }
+  const fallbackCostByProduct = new Map(
+    products.map((product) => [product._id.toString(), toNumber(product.purchasePrice?.toString())])
+  );
+
+  let costOfGoodsSold = 0;
+  for (const row of soldAgg as Array<{ _id: Types.ObjectId; quantitySold: number }>) {
+    const id = row._id.toString();
+    const unitCost = averageCostByProduct.get(id) ?? fallbackCostByProduct.get(id) ?? 0;
+    costOfGoodsSold += row.quantitySold * unitCost;
+  }
+  costOfGoodsSold = roundMoney(costOfGoodsSold);
+
   const salesRevenue = toNumber(clean(revenueAgg[0])?.salesRevenue);
-  const costOfGoodsSold = toNumber(clean(cogsAgg[0])?.costOfGoodsSold);
-  const grossProfit = salesRevenue - costOfGoodsSold;
+  const grossProfit = roundMoney(salesRevenue - costOfGoodsSold);
   const grossMarginPercent = salesRevenue > 0 ? (grossProfit / salesRevenue) * 100 : 0;
   const operatingExpenses = toNumber(clean(expenseAgg[0])?.operatingExpenses);
-  const netProfit = grossProfit - operatingExpenses;
+  const netProfit = roundMoney(grossProfit - operatingExpenses);
 
   return {
     salesRevenue,

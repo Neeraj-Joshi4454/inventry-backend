@@ -2,10 +2,16 @@ import { z } from 'zod';
 import { PaymentMethod } from '../../types/enums';
 import { paginationQuerySchema } from '../../utils/pagination';
 
+// CREDIT means "nothing paid" — it can never be the method of a real payment.
+const paidMethods = Object.values(PaymentMethod).filter((m) => m !== PaymentMethod.CREDIT) as [
+  string,
+  ...string[],
+];
+
 export const recordCustomerPaymentSchema = z.object({
   saleId: z.string().min(1),
   amount: z.number().positive('Payment amount must be greater than zero'),
-  method: z.enum(Object.values(PaymentMethod) as [string, ...string[]]),
+  method: z.enum(paidMethods),
   paymentDate: z.coerce.date().optional(),
   referenceNumber: z.string().trim().max(100).optional(),
   notes: z.string().optional(),
