@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import pinoHttp from 'pino-http';
-import { corsOrigins } from './config/env';
+import { corsOrigins, env } from './config/env';
 import { logger } from './config/logger';
 import { globalRateLimiter } from './middleware/rateLimiter.middleware';
 import { sanitizeBody } from './middleware/sanitize.middleware';
@@ -12,6 +12,7 @@ import apiRoutes from './routes';
 
 export function createApp() {
   const app = express();
+  app.set('trust proxy', env.TRUST_PROXY);
 
   // Security headers first.
   app.use(helmet());

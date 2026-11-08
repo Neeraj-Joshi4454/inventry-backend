@@ -105,9 +105,17 @@ describe('POST /api/v1/auth/refresh', () => {
 
   it('rejects reuse of a token that has already been rotated past', async () => {
     const { refreshToken: firstToken } = await createLoggedInSuperAdmin();
-    await request(app).post('/api/v1/auth/refresh').send({ refreshToken: firstToken }).expect(200);
+    const firstRotate = await request(app)
+      .post('/api/v1/auth/refresh')
+      .send({ refreshToken: firstToken })
+      .expect(200);
+    // The replacement is used, so the client clearly received it — a later
+    // replay of firstToken can't be a lost-response retry.
+    await request(app)
+      .post('/api/v1/auth/refresh')
+      .send({ refreshToken: firstRotate.body.data.refreshToken })
+      .expect(200);
 
-    // firstToken is now revoked (rotated away) — presenting it again must fail.
     // Checked last since (by design) this also revokes the whole session
     // family — see the dedicated reuse-detection test below.
     const reuseRes = await request(app)
@@ -119,23 +127,48 @@ describe('POST /api/v1/auth/refresh', () => {
   it('detects reuse of an already-rotated refresh token and revokes the whole session family', async () => {
     const { refreshToken: originalToken } = await createLoggedInSuperAdmin();
 
-    // Legitimate rotation.
+    // Legitimate rotations.
     const firstRotate = await request(app)
       .post('/api/v1/auth/refresh')
       .send({ refreshToken: originalToken });
-    const rotatedToken = firstRotate.body.data.refreshToken as string;
+    const secondRotate = await request(app)
+      .post('/api/v1/auth/refresh')
+      .send({ refreshToken: firstRotate.body.data.refreshToken });
+    const currentToken = secondRotate.body.data.refreshToken as string;
 
-    // Attacker (or a bug) replays the now-revoked original token.
+    // Attacker (or a bug) replays the long-since-rotated original token.
     const reuseRes = await request(app)
       .post('/api/v1/auth/refresh')
       .send({ refreshToken: originalToken });
     expect(reuseRes.status).toBe(401);
 
-    // Reuse detection should have revoked the legitimately-rotated token too.
+    // Reuse detection should have revoked the legitimate current token too.
     const followUp = await request(app)
       .post('/api/v1/auth/refresh')
-      .send({ refreshToken: rotatedToken });
+      .send({ refreshToken: currentToken });
     expect(followUp.status).toBe(401);
+  });
+
+  it('recovers when the phone never received a refresh reply and retries with the old token', async () => {
+    const { refreshToken: originalToken } = await createLoggedInSuperAdmin();
+
+    // The server rotates, but this reply is "lost" — the client never sees it.
+    await request(app)
+      .post('/api/v1/auth/refresh')
+      .send({ refreshToken: originalToken })
+      .expect(200);
+
+    // The client retries with the only token it has.
+    const retry = await request(app)
+      .post('/api/v1/auth/refresh')
+      .send({ refreshToken: originalToken });
+    expect(retry.status).toBe(200);
+
+    // And the session carries on normally from there.
+    await request(app)
+      .post('/api/v1/auth/refresh')
+      .send({ refreshToken: retry.body.data.refreshToken })
+      .expect(200);
   });
 });
 

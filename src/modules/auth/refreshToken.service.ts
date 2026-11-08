@@ -68,6 +68,8 @@ export async function validateRefreshToken(rawToken: string): Promise<RefreshTok
   }
 
   if (session.revokedAt) {
+    const recovered = await recoverLostRotation(session, parsed.secret);
+    if (recovered) return recovered;
     logger.warn(
       { userId: session.userId, sessionId: session._id },
       'Reuse of a revoked refresh token detected — revoking all sessions for this user'
@@ -88,6 +90,38 @@ export async function validateRefreshToken(rawToken: string): Promise<RefreshTok
 }
 
 /** Rotates a validated session: revokes it and issues a new one in its place. */
+// A phone can lose the reply to a successful refresh (weak signal, app sent
+// to the background) and retry with the token it still holds — which the
+// server has just rotated. Within this window, and only if the token that
+// replaced it was never used, that retry is treated as the same client
+// rather than as a stolen token.
+const LOST_ROTATION_GRACE_MS = 5 * 60 * 1000;
+
+/**
+ * For a just-rotated token presented again: returns its replacement session
+ * (which the caller then rotates as normal) when this is the legitimate
+ * client retrying after a lost response, or null when it should be treated
+ * as reuse.
+ */
+async function recoverLostRotation(
+  session: RefreshTokenDocument,
+  secret: string
+): Promise<RefreshTokenDocument | null> {
+  if (!session.revokedAt || !session.replacedBySessionId) return null;
+  if (Date.now() - session.revokedAt.getTime() > LOST_ROTATION_GRACE_MS) return null;
+  if (!safeCompareHash(hashRefreshSecret(secret), session.tokenHash)) return null;
+
+  const replacement = await RefreshToken.findById(session.replacedBySessionId);
+  if (!replacement || replacement.revokedAt || replacement.expiresAt.getTime() < Date.now()) {
+    return null;
+  }
+  logger.info(
+    { userId: session.userId, sessionId: session._id },
+    'Refresh retried with a just-rotated token — rotating its unused replacement'
+  );
+  return replacement;
+}
+
 export async function rotateSession(
   currentSession: RefreshTokenDocument,
   meta: SessionMeta = {}

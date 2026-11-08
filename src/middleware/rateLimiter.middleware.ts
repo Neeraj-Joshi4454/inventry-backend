@@ -8,7 +8,9 @@ import type { Request } from 'express';
 // it's keyed per-mobile-number, so normal tests (each using a unique
 // mobile) never collide with it, and the one test that deliberately
 // exercises it wants the real, small limit.
-const AUTH_RATE_LIMIT_MAX = Number(process.env.AUTH_RATE_LIMIT_MAX ?? 10);
+// 30, not 10: every signed-in phone refreshes its session about every 15
+// minutes, and staff on the same shop Wi-Fi share one IP.
+const AUTH_RATE_LIMIT_MAX = Number(process.env.AUTH_RATE_LIMIT_MAX ?? 30);
 const GLOBAL_RATE_LIMIT_MAX = Number(process.env.GLOBAL_RATE_LIMIT_MAX ?? 300);
 
 export const globalRateLimiter = rateLimit({

@@ -15,6 +15,11 @@ const envSchema = z.object({
   // "http://localhost:3000,http://localhost:8081". Never "*" in production
   // for an authenticated API — see config validation below.
   CORS_ORIGIN: z.string().default(''),
+  // How many reverse proxies sit in front of the app (Render's load
+  // balancer = 1). Express then takes the client's real IP from
+  // X-Forwarded-For — without it every request looks like it came from the
+  // proxy, and the per-IP rate limits are shared by all users at once.
+  TRUST_PROXY: z.coerce.number().int().min(0).default(1),
 });
 
 const parsed = envSchema.safeParse(process.env);
