@@ -39,5 +39,6 @@ export const AuditAction = {
   EXPENSE_UPDATED: 'EXPENSE_UPDATED',
   EXPENSE_STATUS_CHANGED: 'EXPENSE_STATUS_CHANGED',
   TAX_CONFIG_UPDATED: 'TAX_CONFIG_UPDATED',
+  BUSINESS_BRANDING_UPDATED: 'BUSINESS_BRANDING_UPDATED',
 } as const;
 export type AuditAction = (typeof AuditAction)[keyof typeof AuditAction];
